@@ -47,7 +47,6 @@
         button { padding: 12px; background: #4a90e2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: opacity 0.3s, background 0.3s; }
         button:hover:not(:disabled) { background: #357abd; }
         
-        /* 🌟 ボタン無効時のスタイル（半透明） */
         button:disabled {
             opacity: 0.3;
             cursor: not-allowed;
@@ -70,14 +69,15 @@
         .status-bar.my-turn { background: #1e3d2f; border-color: #2ecc71; }
         .status-bar.opp-turn { background: #3d1e1e; border-color: #e74c3c; }
 
-        #your-turn-banner {
+        /* 🌟 汎用的なターン通知バナー（背景色はJSで動的制御） */
+        #turn-banner {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
-            background: rgba(46, 204, 113, 0.95); color: white; padding: 20px 50px;
+            color: white; padding: 20px 50px;
             font-size: 2.5rem; font-weight: bold; border-radius: 12px; z-index: 100;
             transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
             opacity: 0; pointer-events: none; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
-        #your-turn-banner.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        #turn-banner.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
         
         #board {
             display: grid; grid-template-columns: repeat(var(--grid-size), var(--cell-size));
@@ -94,8 +94,6 @@
         .cell.highlight-attack { background: #5c2525; border: 2px solid #e74c3c; }
 
         .unit { width: 85%; height: 85%; position: relative; display: flex; align-items: center; justify-content: center; transition: opacity 0.3s; }
-        
-        /* 🌟 攻撃後のユニットのみ半透明にする */
         .unit.has-attacked { opacity: 0.4; }
 
         .unit-body {
@@ -124,7 +122,7 @@
 </head>
 <body>
 
-    <div id="your-turn-banner">Your Turn</div>
+    <div id="turn-banner">Your Turn</div>
 
     <div id="setup-screen">
         <h1>Grid Tactics P2P</h1>
@@ -202,16 +200,25 @@
             conn.on('open', () => {
                 document.getElementById('setup-screen').style.display = 'none';
                 document.getElementById('game-screen').style.display = 'flex';
-                initGame();
+                
+                // 🌟 ホスト側で先攻・後攻をランダムに決定してゲストに送信
+                if (state.role === 'p1') {
+                    const firstTurn = Math.random() < 0.5 ? 'p1' : 'p2';
+                    sendAction({ type: 'START_GAME', firstTurn: firstTurn });
+                    initGame(firstTurn);
+                }
             });
             conn.on('data', handleRemoteAction);
         }
 
         function sendAction(a) { if (conn?.open) conn.send(a); }
 
-        function initGame() {
-            state.isMyTurn = (state.role === 'p1');
+        // 🌟 ランダムに決定した先攻情報を受け取って初期化
+        function initGame(firstTurn) {
+            state.turnOwner = firstTurn;
+            state.isMyTurn = (state.role === firstTurn);
             state.hand = [ {...CARD_DATA[0]}, {...CARD_DATA[1]}, {...CARD_DATA[2]}, {...CARD_DATA[3]} ];
+            
             const b = document.getElementById('board');
             b.innerHTML = '';
             for (let v=0; v<25; v++) {
@@ -224,11 +231,20 @@
                 b.appendChild(c);
             }
             updateUI();
-            if (state.isMyTurn) triggerYourTurnBanner();
+            
+            // 🌟 初期ターン通知
+            if (state.isMyTurn) {
+                triggerTurnBanner("Your Turn", true);
+            } else {
+                triggerTurnBanner("Enemy Turn", false);
+            }
         }
 
-        function triggerYourTurnBanner() {
-            const b = document.getElementById('your-turn-banner');
+        // 🌟 Turnバナーの表示をマルチ対応化 (自ターンは緑、敵ターンは赤)
+        function triggerTurnBanner(text, isMyTurn) {
+            const b = document.getElementById('turn-banner');
+            b.innerText = text;
+            b.style.background = isMyTurn ? 'rgba(46, 204, 113, 0.95)' : 'rgba(231, 76, 60, 0.95)';
             b.classList.add('show');
             setTimeout(() => b.classList.remove('show'), 1500);
         }
@@ -241,7 +257,6 @@
             tb.className = `status-bar ${state.isMyTurn ? 'my-turn' : 'opp-turn'}`;
             document.getElementById('current-turn').innerText = state.isMyTurn ? "あなたの番" : "相手の番";
 
-            // 🌟 操作ボタンの動的制御
             const activeUnit = state.selectedBoardIdx !== null ? state.board[state.selectedBoardIdx] : null;
             const canControl = state.isMyTurn && activeUnit && activeUnit.owner === state.role;
             
@@ -266,7 +281,6 @@
                 if (u) {
                     const el = document.createElement('div');
                     const rot = state.role === 'p2' ? (u.dir + 2) % 4 : u.dir;
-                    // 🌟 攻撃済みなら半透明クラスを付与
                     el.className = `unit ${u.owner} ${u.hasAttacked ? 'has-attacked' : ''}`;
                     el.innerHTML = `<div class="unit-body dir-${rot}"></div><div class="unit-text">${u.name}<br>${u.atk}/${u.hp}</div>`;
                     cell.appendChild(el);
@@ -287,8 +301,13 @@
 
         function getValidTargets(idx, unit) {
             const targets = [];
+            if (!unit) return targets;
             const r = Math.floor(idx / 5), c = idx % 5;
+            
             if (state.actionMode === 'move') {
+                // 🌟【修正】すでに移動・回転済みのユニットは一切の移動ターゲットを生成しない（重複移動防止ガード）
+                if (unit.hasMoved || unit.hasRotated) return [];
+
                 [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr, dc]) => {
                     for(let s=1; s<=unit.move; s++) {
                         const nr = r+dr*s, nc = c+dc*s;
@@ -297,13 +316,14 @@
                         if (!targetU) {
                             targets.push(nIdx);
                         } else if (targetU.owner !== unit.owner) {
-                            // 🌟 敵ユニットがいたらそこより先には行けない（すり抜け不可）
-                            break;
+                            break; 
                         }
-                        // 味方ユニットなら、そのマスには止まれないが通過は可能（ループ継続）
                     }
                 });
             } else {
+                // 🌟【修正】すでに攻撃済みのユニットは一切の攻撃ターゲットを生成しない
+                if (unit.hasAttacked) return [];
+
                 const isFarthest = (state.role === 'p1' && idx < 5) || (state.role === 'p2' && idx >= 20);
                 if (isFarthest) targets.push(idx);
                 const front = [[-1, 0], [0, 1], [1, 0], [0, -1]][unit.dir];
@@ -387,16 +407,19 @@
 
         document.getElementById('btn-rotate').onclick = () => {
             const u = state.board[state.selectedBoardIdx];
-            if (u && !u.hasMoved) {
+            if (u && !u.hasMoved && !u.hasRotated) {
                 u.dir = (u.dir + 1) % 4; u.hasRotated = true;
                 sendAction({ type: 'ROTATE', idx: state.selectedBoardIdx, dir: u.dir });
+                state.selectedBoardIdx = null; // 連続操作を防ぐため選択解除
                 updateUI();
             }
         };
 
         document.getElementById('btn-end-turn').onclick = () => {
             state.isMyTurn = false;
+            state.turnOwner = state.role === 'p1' ? 'p2' : 'p1';
             sendAction({ type: 'END_TURN' });
+            triggerTurnBanner("Enemy Turn", false); // 🌟 敵ターン表示
             updateUI();
         };
 
@@ -404,15 +427,23 @@
         document.getElementById('btn-mode-attack').onclick = () => { state.actionMode = 'attack'; updateUI(); };
 
         function handleRemoteAction(a) {
-            if (a.type === 'SUMMON') state.board[a.idx] = { ...a.card, owner: state.role==='p1'?'p2':'p1', dir: a.dir };
+            // 🌟 ゲーム開始同期用
+            if (a.type === 'START_GAME') {
+                initGame(a.firstTurn);
+                return;
+            }
+            if (a.type === 'SUMMON') state.board[a.idx] = { ...a.card, owner: state.role==='p1'?'p2':'p1', dir: a.dir, hasMoved:false, hasRotated:false, hasAttacked:false };
             if (a.type === 'MOVE') { state.board[a.to] = state.board[a.from]; state.board[a.from] = null; }
             if (a.type === 'ROTATE') state.board[a.idx].dir = a.dir;
             if (a.type === 'ATTACK_DECLARE') executeAttack(a.from, a.to);
             if (a.type === 'END_TURN') {
-                state.isMyTurn = true; state.phase = 'summon'; state.summonsThisTurn = 0;
+                state.isMyTurn = true; 
+                state.turnOwner = state.role;
+                state.phase = 'summon'; 
+                state.summonsThisTurn = 0;
                 state.board.forEach(u => { if(u && u.owner === state.role) { u.hasMoved=false; u.hasRotated=false; u.hasAttacked=false; }});
                 state.hand.push({...CARD_DATA[Math.floor(Math.random()*4)]});
-                triggerYourTurnBanner();
+                triggerTurnBanner("Your Turn", true); // 🌟 自ターン表示
             }
             updateUI();
         }
