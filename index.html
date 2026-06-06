@@ -104,9 +104,12 @@
         }
         .unit.p1 .unit-body { background: #2ecc71; box-shadow: inset 0 -5px 10px rgba(0,0,0,0.4); }
         .unit.p2 .unit-body { background: #e74c3c; box-shadow: inset 0 -5px 10px rgba(0,0,0,0.4); }
+        
+        /* 🌟 盤面テキストの視認性を極限まで高めるクッキリ黒縁取り */
         .unit-text {
-            position: relative; z-index: 2; color: white; font-size: 0.65rem; font-weight: bold; text-align: center;
-            text-shadow: 1px 1px 3px rgba(0,0,0,0.9); pointer-events: none; margin-top: 8px;
+            position: relative; z-index: 2; color: white; font-size: 0.7rem; font-weight: bold; text-align: center;
+            text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+            pointer-events: none; margin-top: 8px;
             line-height: 1.2;
         }
 
@@ -120,11 +123,26 @@
         .card.selected { border-color: #f1c40f; background: #3a3a4c; }
         #controls { display: flex; justify-content: space-between; gap: 5px; }
         #log { background: #111; height: 60px; overflow-y: auto; font-size: 0.75rem; padding: 5px; border-radius: 4px; color: #aaa; }
+
+        /* 🌟 勝敗リザルト画面用モーダル */
+        #game-over-screen {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 15, 20, 0.9); z-index: 200;
+            flex-direction: column; align-items: center; justify-content: center; gap: 15px;
+        }
+        #game-over-result { font-size: 3.5rem; font-weight: bold; margin: 0; text-shadow: 0 4px 15px rgba(0,0,0,0.6); }
+        #game-over-turns { font-size: 1.3rem; margin: 0; color: #aaa; font-weight: 500; }
     </style>
 </head>
 <body>
 
     <div id="turn-banner">Your Turn</div>
+
+    <!-- 🌟 勝敗結果表示スクリーン -->
+    <div id="game-over-screen">
+        <h1 id="game-over-result">RESULT</h1>
+        <p id="game-over-turns">経過ターン数: --</p>
+    </div>
 
     <div id="setup-screen">
         <h1>Grid Tactics P2P</h1>
@@ -148,11 +166,13 @@
         </div>
         <div id="board"></div>
         <div id="my-hp" class="hp-display-box my-hp-color">10</div>
+        
+        <!-- 🌟 ボタン名を英語化、Spinボタンの色を鮮やかなゴールドオレンジに変更 -->
         <div id="controls">
-            <button id="btn-mode-move">移動</button>
-            <button id="btn-mode-attack">攻撃</button>
-            <button id="btn-rotate" style="background:#9b59b6;">右回転</button>
-            <button id="btn-end-turn" style="background:#e67e22;">ターン終了</button>
+            <button id="btn-mode-move">Move</button>
+            <button id="btn-mode-attack">Attack</button>
+            <button id="btn-rotate" style="background:#f39c12;">Spin</button>
+            <button id="btn-end-turn" style="background:#e67e22;">Turn End</button>
         </div>
         <div id="hand"></div>
         <div id="log"></div>
@@ -168,8 +188,8 @@
         ];
 
         let state = {
-            role: null, isMyTurn: false, turnOwner: 'p1', phase: 'summon',
-            summonsThisTurn: 0, maxSummons: 1, turnCount: 1,
+            role: null, isMyTurn: false, turnOwner: 'p1', firstTurn: 'p1', phase: 'summon',
+            summonsThisTurn: 0, maxSummons: 1, turnCount: 1, isGameOver: false,
             hp: { p1: 10, p2: 10 }, board: Array(25).fill(null), hand: [],
             selectedCardIdx: null, selectedBoardIdx: null, actionMode: 'move'
         };
@@ -215,6 +235,7 @@
         function sendAction(a) { if (conn?.open) conn.send(a); }
 
         function initGame(firstTurn) {
+            state.firstTurn = firstTurn;
             state.turnOwner = firstTurn;
             state.isMyTurn = (state.role === firstTurn);
             state.hand = [ {...CARD_DATA[0]}, {...CARD_DATA[1]}, {...CARD_DATA[2]}, {...CARD_DATA[3]} ];
@@ -247,21 +268,44 @@
             setTimeout(() => b.classList.remove('show'), 1500);
         }
 
+        // 🌟 勝敗結果を画面いっぱいに表示して完全停止する関数
+        function showGameOverScreen() {
+            const screen = document.getElementById('game-over-screen');
+            const resultEl = document.getElementById('game-over-result');
+            const turnsEl = document.getElementById('game-over-turns');
+            
+            const amIWinner = state.hp[state.role] > 0;
+            
+            if (amIWinner) {
+                resultEl.innerText = "YOU WIN";
+                resultEl.style.color = "#2ecc71";
+            } else {
+                resultEl.innerText = "YOU LOSE";
+                resultEl.style.color = "#e74c3c";
+            }
+            
+            turnsEl.innerText = `経過ターン数: ${state.turnCount} ターン`;
+            screen.style.display = 'flex';
+        }
+
         function updateUI() {
             document.getElementById('my-hp').innerText = state.hp[state.role];
             document.getElementById('opp-hp').innerText = state.hp[state.role === 'p1' ? 'p2' : 'p1'];
             
             const tb = document.getElementById('turn-bar');
             tb.className = `status-bar ${state.isMyTurn ? 'my-turn' : 'opp-turn'}`;
-            document.getElementById('current-turn').innerText = state.isMyTurn ? "あなたの番" : "相手の番";
+            
+            // 🌟 プレイ中も現在の経過ターン数を分かりやすく表示
+            document.getElementById('current-turn').innerText = `${state.turnCount} (${state.isMyTurn ? "あなたの番" : "相手の番"})`;
 
             const activeUnit = state.selectedBoardIdx !== null ? state.board[state.selectedBoardIdx] : null;
             const canControl = state.isMyTurn && activeUnit && activeUnit.owner === state.role;
             
-            document.getElementById('btn-mode-move').disabled = !canControl || activeUnit.hasMoved || activeUnit.hasRotated;
-            document.getElementById('btn-mode-attack').disabled = !canControl || activeUnit.hasAttacked;
-            document.getElementById('btn-rotate').disabled = !canControl || activeUnit.hasMoved || activeUnit.hasRotated;
-            document.getElementById('btn-end-turn').disabled = !state.isMyTurn;
+            // 🌟 ゲーム終了時はすべてのボタンを強制無効化
+            document.getElementById('btn-mode-move').disabled = state.isGameOver || !canControl || activeUnit.hasMoved || activeUnit.hasRotated;
+            document.getElementById('btn-mode-attack').disabled = state.isGameOver || !canControl || activeUnit.hasAttacked;
+            document.getElementById('btn-rotate').disabled = state.isGameOver || !canControl || activeUnit.hasMoved || activeUnit.hasRotated;
+            document.getElementById('btn-end-turn').disabled = state.isGameOver || !state.isMyTurn;
 
             document.getElementById('btn-mode-move').style.background = state.actionMode === 'move' ? '#2980b9' : '#34495e';
             document.getElementById('btn-mode-attack').style.background = state.actionMode === 'attack' ? '#c0392b' : '#34495e';
@@ -283,12 +327,12 @@
                     const rot = state.role === 'p2' ? (u.dir + 2) % 4 : u.dir;
                     el.className = `unit ${u.owner} ${u.hasAttacked ? 'has-attacked' : ''}`;
                     
-                    // 🌟 盤面ユニットの「攻撃力（赤）」と「体力（青）」の色分け表示
+                    // 🌟 盤面：視認性の高い「ネオンイエロー（攻撃）」と「ネオンシアン（体力）」
                     el.innerHTML = `
                         <div class="unit-body dir-${rot}"></div>
                         <div class="unit-text">
                             ${u.name}<br>
-                            <span style="color: #ff5252;">${u.atk}</span>/<span style="color: #40a9ff;">${u.hp}</span>
+                            <span style="color: #ffeb3b;">${u.atk}</span>/<span style="color: #00e5ff;">${u.hp}</span>
                         </div>`;
                     cell.appendChild(el);
                 }
@@ -311,33 +355,32 @@
                 const el = document.createElement('div');
                 el.className = `card ${state.selectedCardIdx === idx ? 'selected' : ''}`;
                 
-                // 🌟 手札ユニットの表示項目（名前、攻撃力、体力）と色分け対応
+                // 🌟 手札：盤面と完全に一致させた高コントラストな色分け表示
                 if (c.type === 'unit') {
                     el.innerHTML = `
                         <b>${c.name}</b>
                         <div style="margin-top: 4px; line-height: 1.3;">
-                            <span style="color: #ff5252; font-weight: bold;">攻: ${c.atk}</span><br>
-                            <span style="color: #40a9ff; font-weight: bold;">体: ${c.hp}</span>
+                            <span style="color: #ffeb3b; font-weight: bold;">攻: ${c.atk}</span><br>
+                            <span style="color: #00e5ff; font-weight: bold;">体: ${c.hp}</span>
                         </div>`;
                 } else {
                     el.innerHTML = `<b>${c.name}</b><br><span style="color: #aaa; font-size: 0.6rem;">${c.desc}</span>`;
                 }
                 
-                el.onclick = () => { if(state.isMyTurn) { state.selectedCardIdx = idx; state.selectedBoardIdx = null; updateUI(); }};
+                el.onclick = () => { if(state.isMyTurn && !state.isGameOver) { state.selectedCardIdx = idx; state.selectedBoardIdx = null; updateUI(); }};
                 h.appendChild(el);
             });
         }
 
         function getMoveTargets(idx, unit) {
             const targets = [];
-            if (!unit || unit.hasMoved || unit.hasRotated) return targets;
+            if (!unit || unit.hasMoved || unit.hasRotated || state.isGameOver) return targets;
             const r = Math.floor(idx / 5), c = idx % 5;
             
             [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr, dc]) => {
                 for(let s=1; s<=unit.move; s++) {
-                    const nr = r+dr*s, nc = c+dr*s; // バグ防止のため、前verから引き継いだ計算式を安全に維持
-                    const realNc = c+dc*s; 
                     const finalNr = r+dr*s;
+                    const realNc = c+dc*s; 
                     if (finalNr<0||finalNr>=5||realNc<0||realNc>=5) break;
                     const nIdx = finalNr*5+realNc, targetU = state.board[nIdx];
                     if (!targetU) {
@@ -352,7 +395,7 @@
 
         function getAttackTargets(idx, unit) {
             const targets = [];
-            if (!unit || unit.hasAttacked) return targets;
+            if (!unit || unit.hasAttacked || state.isGameOver) return targets;
             const r = Math.floor(idx / 5), c = idx % 5;
 
             const isFarthest = (state.role === 'p1' && idx < 5) || (state.role === 'p2' && idx >= 20);
@@ -369,7 +412,9 @@
         }
 
         function onCellClick(idx) {
-            if (!state.isMyTurn) return;
+            // 🌟 ゲームオーバー時はクリックを完全遮断
+            if (!state.isMyTurn || state.isGameOver) return;
+            
             if (state.selectedCardIdx !== null && state.phase === 'summon') {
                 const isZone = (state.role === 'p1' && idx >= 20) || (state.role === 'p2' && idx <= 4);
                 if (isZone && !state.board[idx]) {
@@ -430,7 +475,6 @@
             if (f === t) {
                 const opp = state.role === 'p1' ? 'p2' : 'p1';
                 state.hp[opp] = Math.max(0, state.hp[opp] - atkU.atk);
-                if (state.hp[opp] <= 0) alert("WIN!");
             } else {
                 const tarU = state.board[t];
                 if (tarU) {
@@ -439,9 +483,17 @@
                 }
             }
             updateUI();
+
+            // 🌟 どちらかのプレイヤーのHPが0になったらゲーム終了処理
+            if (state.hp.p1 <= 0 || state.hp.p2 <= 0) {
+                state.isGameOver = true;
+                updateUI();
+                showGameOverScreen();
+            }
         }
 
         document.getElementById('btn-rotate').onclick = () => {
+            if (state.isGameOver) return;
             const u = state.board[state.selectedBoardIdx];
             if (u && !u.hasMoved && !u.hasRotated) {
                 u.dir = (u.dir + 1) % 4; u.hasRotated = true;
@@ -452,15 +504,23 @@
         };
 
         document.getElementById('btn-end-turn').onclick = () => {
+            if (state.isGameOver) return;
             state.isMyTurn = false;
-            state.turnOwner = state.role === 'p1' ? 'p2' : 'p1';
-            sendAction({ type: 'END_TURN' });
+            const nextOwner = state.role === 'p1' ? 'p2' : 'p1';
+            state.turnOwner = nextOwner;
+            
+            // 🌟 1往復（先攻のプレイヤーに手番が戻る時）したら経過ターン数を+1
+            if (nextOwner === state.firstTurn) {
+                state.turnCount++;
+            }
+
+            sendAction({ type: 'END_TURN', nextTurnCount: state.turnCount });
             triggerTurnBanner("Enemy Turn", false); 
             updateUI();
         };
 
-        document.getElementById('btn-mode-move').onclick = () => { state.actionMode = 'move'; updateUI(); };
-        document.getElementById('btn-mode-attack').onclick = () => { state.actionMode = 'attack'; updateUI(); };
+        document.getElementById('btn-mode-move').onclick = () => { if(!state.isGameOver) { state.actionMode = 'move'; updateUI(); } };
+        document.getElementById('btn-mode-attack').onclick = () => { if(!state.isGameOver) { state.actionMode = 'attack'; updateUI(); } };
 
         function handleRemoteAction(a) {
             if (a.type === 'START_GAME') {
@@ -478,6 +538,14 @@
                 state.summonsThisTurn = 0;
                 state.board.forEach(u => { if(u && u.owner === state.role) { u.hasMoved=false; u.hasRotated=false; u.hasAttacked=false; }});
                 state.hand.push({...CARD_DATA[Math.floor(Math.random()*4)]});
+                
+                // 🌟 リモート側からのターン数に同期
+                state.turnCount = a.nextTurnCount || state.turnCount;
+                if (state.role === state.firstTurn) {
+                    // 念のための安全策としてのカウントアップ
+                    if (!a.nextTurnCount) state.turnCount++;
+                }
+
                 triggerTurnBanner("Your Turn", true); 
             }
             updateUI();
