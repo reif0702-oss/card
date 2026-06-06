@@ -8,7 +8,7 @@
     <style>
         :root {
             --grid-size: 5;
-            --cell-size: 65px; /* 5x5に合わせてセルサイズを最適化 */
+            --cell-size: 65px;
         }
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
@@ -23,7 +23,7 @@
             user-select: none;
         }
         
-        /* 接続画面（ロゴはここに集約） */
+        /* 接続画面 */
         #setup-screen {
             display: flex;
             flex-direction: column;
@@ -52,7 +52,7 @@
         /* ゲーム画面（プレイ中はロゴなし） */
         #game-screen { display: none; width: 100%; max-width: 400px; flex-direction: column; gap: 8px; }
         
-        /* 🌟 数字のみのシンプルライフ表示 */
+        /* 数字のみのシンプルライフ表示 */
         .hp-display-box {
             font-size: 2.8rem;
             font-weight: bold;
@@ -62,8 +62,8 @@
             text-shadow: 0 2px 4px rgba(0,0,0,0.6);
             letter-spacing: 1px;
         }
-        .opp-hp-color { color: #e74c3c; } /* 相手は赤数字 */
-        .my-hp-color { color: #2ecc71; }  /* 自分は緑数字 */
+        .opp-hp-color { color: #e74c3c; } 
+        .my-hp-color { color: #2ecc71; }  
 
         .status-bar { display: flex; justify-content: space-between; background: #2a2a35; padding: 8px 12px; border-radius: 8px; font-size: 0.85rem; transition: background 0.3s, border 0.3s; }
         .status-bar.my-turn { background: #1e3d2f; border: 2px solid #2ecc71; box-sizing: border-box; }
@@ -114,7 +114,7 @@
         .cell.highlight-move { background: #34495e; border: 2px solid #3498db; }
         .cell.highlight-attack { background: #5c2525; border: 2px solid #e74c3c; }
 
-        /* ユニット（将棋駒スタイル） */
+        /* ユニット */
         .unit { width: 85%; height: 85%; position: relative; display: flex; align-items: center; justify-content: center; transition: opacity 0.3s; }
         .unit.exhausted { opacity: 0.4; }
         .unit-body {
@@ -132,10 +132,10 @@
         }
 
         /* 向き */
-        .dir-0 { transform: rotate(0deg); }   /* 上 */
-        .dir-1 { transform: rotate(90deg); }  /* 右 */
-        .dir-2 { transform: rotate(180deg); } /* 下 */
-        .dir-3 { transform: rotate(270deg); } /* 左 */
+        .dir-0 { transform: rotate(0deg); }   
+        .dir-1 { transform: rotate(90deg); }  
+        .dir-2 { transform: rotate(180deg); } 
+        .dir-3 { transform: rotate(270deg); } 
 
         /* カード・操作UI */
         #hand { display: flex; gap: 8px; justify-content: center; margin-top: 5px; min-height: 80px;}
@@ -193,7 +193,7 @@
     </div>
 
     <script>
-        const GRID_SIZE = 5; // 🌟 5x5マスに変更
+        const GRID_SIZE = 5; 
         const CARD_DATA = [
             { id: 'u1', name: 'ソルジャー', type: 'unit', hp: 4, atk: 2, move: 1, range: 1 },
             { id: 'u2', name: 'スカウト', type: 'unit', hp: 3, atk: 1, move: 2, range: 1 },
@@ -210,7 +210,7 @@
             maxSummons: 1,
             turnCount: 1,
             hp: { p1: 10, p2: 10 },
-            board: Array(GRID_SIZE * GRID_SIZE).fill(null), // 25マス
+            board: Array(GRID_SIZE * GRID_SIZE).fill(null), 
             hand: [],
             selectedCardIdx: null,
             selectedBoardIdx: null,
@@ -273,11 +273,11 @@
             const boardEl = document.getElementById('board');
             boardEl.innerHTML = '';
             for (let v = 0; v < GRID_SIZE * GRID_SIZE; v++) {
-                const i = state.role === 'p1' ? v : 24 - v; // 🌟 5x5(24-v)で反転マッピング
+                const i = state.role === 'p1' ? v : 24 - v; 
                 const cell = document.createElement('div');
                 cell.className = 'cell';
-                if (i >= 20) cell.classList.add('spawn-zone-p1'); // ホストの手前5マス
-                if (i <= 4) cell.classList.add('spawn-zone-p2');  // ゲストの手前5マス
+                if (i >= 20) cell.classList.add('spawn-zone-p1'); 
+                if (i <= 4) cell.classList.add('spawn-zone-p2');  
                 cell.addEventListener('click', () => onCellClick(i));
                 boardEl.appendChild(cell);
             }
@@ -300,7 +300,6 @@
         }
 
         function updateUI() {
-            // 🌟 ライフ表示（数字のみ更新）
             document.getElementById('my-hp').innerText = state.hp[state.role];
             document.getElementById('opp-hp').innerText = state.hp[state.role === 'p1' ? 'p2' : 'p1'];
             
@@ -383,18 +382,25 @@
                         const nr = r + dr*step, nc = c + dc*step;
                         if (nr>=0 && nr<GRID_SIZE && nc>=0 && nc<GRID_SIZE) {
                             const nIdx = nr * GRID_SIZE + nc;
-                            if (!state.board[nIdx]) targets.push(nIdx);
+                            if (!state.board[nIdx]) {
+                                targets.push(nIdx);
+                            } else {
+                                // 🌟【修正】進行方向にユニット（敵・味方問わず）がいた場合、それ以上進めない（すり抜け防止）
+                                break;
+                            }
+                        } else {
+                            break;
                         }
                     }
                 });
             } else if (state.actionMode === 'attack') {
-                // 🌟 新ルール：自分から見て一番遠い行（敵陣最奥5マス）にいる場合のみ、自分をタップしてダイレクト可能
+                // 自分から見て一番遠い行（敵陣最奥5マス）にいる場合のみ、自分をタップしてダイレクト可能
                 const isAtFarthestRow = (state.role === 'p1' && idx < 5) || (state.role === 'p2' && idx >= 20);
                 if (isAtFarthestRow) {
-                    targets.push(idx); // 自分自身のマスをハイライトに含める
+                    targets.push(idx); 
                 }
 
-                // 通常攻撃：ただし範囲内に「敵ユニット」が存在するときのみ選択可能（空振りダイレクトの廃止）
+                // 通常攻撃：範囲内に「敵ユニット」が存在するときのみ
                 for (let step = 1; step <= unit.range; step++) {
                     const nr = r + front[0] * step;
                     const nc = c + front[1] * step;
@@ -442,6 +448,20 @@
             }
 
             const clickedUnit = state.board[idx];
+
+            // 🌟【修正】ダイレクトアタックの判定を「通常選択」より最優先で割り込ませる
+            if (state.selectedBoardIdx === idx && state.actionMode === 'attack' && clickedUnit && clickedUnit.owner === state.role) {
+                const validTargets = getValidTargets(state.selectedBoardIdx, clickedUnit);
+                if (validTargets.includes(idx)) {
+                    clickedUnit.hasAttacked = true;
+                    addLog(`最奥行からダイレクトアタックを宣言！`);
+                    sendAction({ type: 'ATTACK_DECLARE', from: state.selectedBoardIdx, to: idx });
+                    executeAttack(state.selectedBoardIdx, idx);
+                    state.selectedBoardIdx = null;
+                    return;
+                }
+            }
+
             if (clickedUnit && clickedUnit.owner === state.role) {
                 state.selectedBoardIdx = idx;
                 state.selectedCardIdx = null;
@@ -474,7 +494,7 @@
             const attacker = state.board[fromIdx];
             if (!attacker) return;
 
-            // 🌟 最奥行からのダイレクトアタック（自分自身をタップした場合）
+            // 最奥行からのダイレクトアタック（自分自身をタップした場合）
             if (fromIdx === toIdx) {
                 const oppRole = attacker.owner === 'p1' ? 'p2' : 'p1';
                 state.hp[oppRole] = Math.max(0, state.hp[oppRole] - attacker.atk);
@@ -553,7 +573,7 @@
                     break;
                 case 'ATTACK_DECLARE':
                     if(state.board[action.from]) state.board[action.from].hasAttacked = true;
-                    addLog(action.from === action.to ? `相手が最奥行からダイレクトアタック！` : `相手から攻撃宣言！カウンター`);
+                    addLog(action.from === action.to ? `相手が最奥行からダイレクトアタック！` : `相手から攻撃宣言！`);
                     executeAttack(action.from, action.to);
                     break;
                 case 'COUNTER':
