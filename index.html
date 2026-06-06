@@ -7,8 +7,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
     <style>
         :root {
-            --grid-size: 4;
-            --cell-size: 75px;
+            --grid-size: 5;
+            --cell-size: 65px; /* 5x5に合わせてセルサイズを最適化 */
         }
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
@@ -22,9 +22,8 @@
             -webkit-user-select: none;
             user-select: none;
         }
-        h1 { margin: 5px 0; font-size: 1.5rem; }
         
-        /* 接続画面 */
+        /* 接続画面（ロゴはここに集約） */
         #setup-screen {
             display: flex;
             flex-direction: column;
@@ -36,6 +35,7 @@
             border-radius: 8px;
             box-sizing: border-box;
         }
+        #setup-screen h1 { text-align: center; margin: 0 0 10px 0; font-size: 1.8rem; }
         .setup-group {
             display: flex;
             flex-direction: column;
@@ -49,10 +49,23 @@
         button:hover { background: #357abd; }
         .room-id-display { font-size: 1.5rem; font-weight: bold; color: #f1c40f; text-align: center; margin: 5px 0; letter-spacing: 2px;}
 
-        /* ゲーム画面 */
-        #game-screen { display: none; width: 100%; max-width: 400px; flex-direction: column; gap: 10px; }
-        .status-bar { display: flex; justify-content: space-between; background: #2a2a35; padding: 10px; border-radius: 8px; font-size: 0.9rem; transition: background 0.3s, border 0.3s; }
+        /* ゲーム画面（プレイ中はロゴなし） */
+        #game-screen { display: none; width: 100%; max-width: 400px; flex-direction: column; gap: 8px; }
         
+        /* 🌟 数字のみのシンプルライフ表示 */
+        .hp-display-box {
+            font-size: 2.8rem;
+            font-weight: bold;
+            text-align: center;
+            padding: 2px 0;
+            line-height: 1;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+            letter-spacing: 1px;
+        }
+        .opp-hp-color { color: #e74c3c; } /* 相手は赤数字 */
+        .my-hp-color { color: #2ecc71; }  /* 自分は緑数字 */
+
+        .status-bar { display: flex; justify-content: space-between; background: #2a2a35; padding: 8px 12px; border-radius: 8px; font-size: 0.85rem; transition: background 0.3s, border 0.3s; }
         .status-bar.my-turn { background: #1e3d2f; border: 2px solid #2ecc71; box-sizing: border-box; }
         .status-bar.opp-turn { background: #3d1e1e; border: 2px solid #e74c3c; box-sizing: border-box; }
 
@@ -73,7 +86,6 @@
             opacity: 0;
             pointer-events: none;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
         #your-turn-banner.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
         
@@ -102,44 +114,24 @@
         .cell.highlight-move { background: #34495e; border: 2px solid #3498db; }
         .cell.highlight-attack { background: #5c2525; border: 2px solid #e74c3c; }
 
-        /* 🌟 ユニットデザインの大幅変更（五角形の駒スタイル） */
-        .unit {
-            width: 85%;
-            height: 85%;
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: opacity 0.3s;
-        }
-        /* 行動をすべて消費したユニットは半透明（暗化）に */
+        /* ユニット（将棋駒スタイル） */
+        .unit { width: 85%; height: 85%; position: relative; display: flex; align-items: center; justify-content: center; transition: opacity 0.3s; }
         .unit.exhausted { opacity: 0.4; }
-
-        /* ユニットの「体」（これだけが回転する） */
         .unit-body {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            clip-path: polygon(50% 0%, 100% 25%, 100% 100%, 0% 100%, 0% 25%); /* 将棋の駒のような五角形 */
+            clip-path: polygon(50% 0%, 100% 25%, 100% 100%, 0% 100%, 0% 25%);
             z-index: 1;
             transition: transform 0.25s ease;
         }
         .unit.p1 .unit-body { background: #2ecc71; box-shadow: inset 0 -5px 10px rgba(0,0,0,0.4); }
         .unit.p2 .unit-body { background: #e74c3c; box-shadow: inset 0 -5px 10px rgba(0,0,0,0.4); }
-
-        /* ユニット内の文字（回転せず、常に直立して読みやすい） */
         .unit-text {
-            position: relative;
-            z-index: 2;
-            color: white;
-            font-size: 0.7rem;
-            font-weight: bold;
-            text-align: center;
-            text-shadow: 1px 1px 3px rgba(0,0,0,0.9);
-            pointer-events: none;
-            margin-top: 10px; /* 尖っている部分を避けて配置 */
+            position: relative; z-index: 2; color: white; font-size: 0.65rem; font-weight: bold; text-align: center;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.9); pointer-events: none; margin-top: 8px;
         }
 
-        /* 向き（ボディーに適用される回転角度） */
+        /* 向き */
         .dir-0 { transform: rotate(0deg); }   /* 上 */
         .dir-1 { transform: rotate(90deg); }  /* 右 */
         .dir-2 { transform: rotate(180deg); } /* 下 */
@@ -147,16 +139,7 @@
 
         /* カード・操作UI */
         #hand { display: flex; gap: 8px; justify-content: center; margin-top: 5px; min-height: 80px;}
-        .card {
-            width: 70px;
-            background: #2a2a35;
-            border: 2px solid #555;
-            border-radius: 6px;
-            padding: 5px;
-            font-size: 0.7rem;
-            text-align: center;
-            cursor: pointer;
-        }
+        .card { width: 70px; background: #2a2a35; border: 2px solid #555; border-radius: 6px; padding: 5px; font-size: 0.7rem; text-align: center; cursor: pointer; }
         .card.selected { border-color: #f1c40f; background: #3a3a4c; }
         #controls { display: flex; justify-content: space-between; gap: 5px; }
         #log { background: #111; height: 60px; overflow-y: auto; font-size: 0.75rem; padding: 5px; border-radius: 4px; color: #aaa; }
@@ -164,11 +147,10 @@
 </head>
 <body>
 
-    <h1>Grid Tactics P2P</h1>
-
     <div id="your-turn-banner">Your Turn</div>
 
     <div id="setup-screen">
+        <h1>Grid Tactics P2P</h1>
         <div class="setup-group">
             <button id="btn-create-room">部屋を作る (ホスト)</button>
             <div id="room-id-area" style="display:none; text-align:center; margin-top:10px;">
@@ -177,9 +159,7 @@
                 <span style="font-size:0.8rem; color:#aaa;">相手の接続を待っています...</span>
             </div>
         </div>
-
         <div style="text-align: center; font-weight: bold; color: #888;">または</div>
-
         <div class="setup-group">
             <label for="input-room-id">部屋番号(7桁)を入力して参加:</label>
             <input type="text" id="input-room-id" maxlength="7" placeholder="X1Y2Z3A">
@@ -188,10 +168,7 @@
     </div>
 
     <div id="game-screen">
-        <div class="status-bar">
-            <div>あなた: <span id="my-role">-</span> | ライフ: <span id="my-hp">10</span></div>
-            <div>相手のライフ: <span id="opp-hp">10</span></div>
-        </div>
+        <div id="opp-hp" class="hp-display-box opp-hp-color">10</div>
         
         <div id="turn-bar" class="status-bar">
             <div>ターン: <span id="current-turn">-</span></div>
@@ -200,6 +177,8 @@
 
         <div id="board"></div>
 
+        <div id="my-hp" class="hp-display-box my-hp-color">10</div>
+
         <div id="controls">
             <button id="btn-mode-move">移動</button>
             <button id="btn-mode-attack">攻撃</button>
@@ -207,14 +186,14 @@
             <button id="btn-end-turn" style="background:#e67e22;">ターン終了</button>
         </div>
 
-        <div>手札 (タップして選択後、自陣の点線に召喚):</div>
+        <div>手札 (自陣5マスの点線に召喚):</div>
         <div id="hand"></div>
         
         <div id="log">ゲーム開始を待っています...</div>
     </div>
 
     <script>
-        const GRID_SIZE = 4;
+        const GRID_SIZE = 5; // 🌟 5x5マスに変更
         const CARD_DATA = [
             { id: 'u1', name: 'ソルジャー', type: 'unit', hp: 4, atk: 2, move: 1, range: 1 },
             { id: 'u2', name: 'スカウト', type: 'unit', hp: 3, atk: 1, move: 2, range: 1 },
@@ -231,7 +210,7 @@
             maxSummons: 1,
             turnCount: 1,
             hp: { p1: 10, p2: 10 },
-            board: Array(GRID_SIZE * GRID_SIZE).fill(null),
+            board: Array(GRID_SIZE * GRID_SIZE).fill(null), // 25マス
             hand: [],
             selectedCardIdx: null,
             selectedBoardIdx: null,
@@ -283,7 +262,6 @@
 
         function initGame() {
             addLog("対戦が開始されました！");
-            document.getElementById('my-role').innerText = state.role === 'p1' ? 'プレイヤー1' : 'プレイヤー2';
             state.isMyTurn = (state.role === 'p1');
             state.hand = [ { ...CARD_DATA[0] }, { ...CARD_DATA[1] }, { ...CARD_DATA[2] }, { ...CARD_DATA[3] } ];
             createBoardUI();
@@ -295,11 +273,11 @@
             const boardEl = document.getElementById('board');
             boardEl.innerHTML = '';
             for (let v = 0; v < GRID_SIZE * GRID_SIZE; v++) {
-                const i = state.role === 'p1' ? v : 15 - v;
+                const i = state.role === 'p1' ? v : 24 - v; // 🌟 5x5(24-v)で反転マッピング
                 const cell = document.createElement('div');
                 cell.className = 'cell';
-                if (i >= 12) cell.classList.add('spawn-zone-p1');
-                if (i <= 3) cell.classList.add('spawn-zone-p2');
+                if (i >= 20) cell.classList.add('spawn-zone-p1'); // ホストの手前5マス
+                if (i <= 4) cell.classList.add('spawn-zone-p2');  // ゲストの手前5マス
                 cell.addEventListener('click', () => onCellClick(i));
                 boardEl.appendChild(cell);
             }
@@ -311,7 +289,6 @@
             setTimeout(() => { banner.classList.remove('show'); }, 1500);
         }
 
-        // 🌟 ターン開始時に、自軍ユニットのアクション制限フラグをリセットする
         function resetUnitActions() {
             state.board.forEach(unit => {
                 if (unit && unit.owner === state.role) {
@@ -323,8 +300,10 @@
         }
 
         function updateUI() {
+            // 🌟 ライフ表示（数字のみ更新）
             document.getElementById('my-hp').innerText = state.hp[state.role];
             document.getElementById('opp-hp').innerText = state.hp[state.role === 'p1' ? 'p2' : 'p1'];
+            
             document.getElementById('current-phase').innerText = state.phase === 'summon' ? '召喚' : 'アクション';
             document.getElementById('summon-count').innerText = state.summonsThisTurn;
 
@@ -342,7 +321,7 @@
 
             const boardEl = document.getElementById('board');
             for (let v = 0; v < GRID_SIZE * GRID_SIZE; v++) {
-                const i = state.role === 'p1' ? v : 15 - v; 
+                const i = state.role === 'p1' ? v : 24 - v; 
                 const cell = boardEl.children[v];
                 cell.innerHTML = '';
                 cell.classList.remove('highlight-move', 'highlight-attack');
@@ -350,15 +329,10 @@
                 const unit = state.board[i];
                 if (unit) {
                     const unitEl = document.createElement('div');
-                    
-                    // 🌟 相手ユニットは180度反転して自分に向かってくる表示ロジック
                     const displayDir = state.role === 'p2' ? (unit.dir + 2) % 4 : unit.dir;
-                    
-                    // 🌟「完全行動済み」なら exhausted クラスを付与して暗くする
                     const isExhausted = (unit.hasMoved || unit.hasRotated) && unit.hasAttacked;
-                    unitEl.className = `unit ${unit.owner} ${isExhausted ? 'exhausted' : ''}`;
                     
-                    // 構造を分割：体(五角形)だけを回転させ、テキストは直立のまま
+                    unitEl.className = `unit ${unit.owner} ${isExhausted ? 'exhausted' : ''}`;
                     unitEl.innerHTML = `
                         <div class="unit-body dir-${displayDir}"></div>
                         <div class="unit-text">${unit.name}<br>${unit.atk}/${unit.hp}</div>
@@ -370,8 +344,7 @@
                     const activeUnit = state.board[state.selectedBoardIdx];
                     if (activeUnit && activeUnit.owner === state.role) {
                         if (getValidTargets(state.selectedBoardIdx, activeUnit).includes(i)) {
-                            const cellClass = state.actionMode === 'move' ? 'highlight-move' : 'highlight-attack';
-                            cell.classList.add(cellClass);
+                            cell.classList.add(state.actionMode === 'move' ? 'highlight-move' : 'highlight-attack');
                         }
                     }
                 }
@@ -395,10 +368,7 @@
 
         function getValidTargets(idx, unit) {
             const targets = [];
-            
-            // 🌟 既に攻撃済みの場合は攻撃対象を出さない
             if (state.actionMode === 'attack' && unit.hasAttacked) return [];
-            // 🌟 既に移動または方向変更済みの場合は移動対象を出さない
             if (state.actionMode === 'move' && (unit.hasMoved || unit.hasRotated)) return [];
 
             const r = Math.floor(idx / GRID_SIZE);
@@ -418,11 +388,22 @@
                     }
                 });
             } else if (state.actionMode === 'attack') {
+                // 🌟 新ルール：自分から見て一番遠い行（敵陣最奥5マス）にいる場合のみ、自分をタップしてダイレクト可能
+                const isAtFarthestRow = (state.role === 'p1' && idx < 5) || (state.role === 'p2' && idx >= 20);
+                if (isAtFarthestRow) {
+                    targets.push(idx); // 自分自身のマスをハイライトに含める
+                }
+
+                // 通常攻撃：ただし範囲内に「敵ユニット」が存在するときのみ選択可能（空振りダイレクトの廃止）
                 for (let step = 1; step <= unit.range; step++) {
                     const nr = r + front[0] * step;
                     const nc = c + front[1] * step;
                     if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE) {
-                        targets.push(nr * GRID_SIZE + nc);
+                        const nIdx = nr * GRID_SIZE + nc;
+                        const targetUnit = state.board[nIdx];
+                        if (targetUnit && targetUnit.owner !== state.role) {
+                            targets.push(nIdx);
+                        }
                     }
                 }
             }
@@ -441,16 +422,11 @@
                 const card = state.hand[state.selectedCardIdx];
                 if (card.type !== 'unit') return;
 
-                const isSpawnZone = (state.role === 'p1' && idx >= 12) || (state.role === 'p2' && idx <= 3);
+                const isSpawnZone = (state.role === 'p1' && idx >= 20) || (state.role === 'p2' && idx <= 4);
                 if (isSpawnZone && !state.board[idx]) {
-                    // 🌟 新しく召喚されたユニットに行動履歴フラグを付与
                     state.board[idx] = { 
-                        ...card, 
-                        owner: state.role, 
-                        dir: state.role === 'p1' ? 0 : 2,
-                        hasMoved: false,
-                        hasRotated: false,
-                        hasAttacked: false
+                        ...card, owner: state.role, dir: state.role === 'p1' ? 0 : 2,
+                        hasMoved: false, hasRotated: false, hasAttacked: false
                     };
                     state.hand.splice(state.selectedCardIdx, 1);
                     state.summonsThisTurn++;
@@ -476,18 +452,16 @@
                 
                 if (validTargets.includes(idx)) {
                     if (state.actionMode === 'move') {
-                        // 🌟 ルール適用: 移動処理
                         activeUnit.hasMoved = true; 
                         state.board[idx] = activeUnit;
                         state.board[state.selectedBoardIdx] = null;
-                        addLog(`ユニットが1回移動しました。(これ以上移動・回転不可)`);
+                        addLog(`ユニットが移動しました。`);
                         sendAction({ type: 'MOVE', from: state.selectedBoardIdx, to: idx });
                         state.selectedBoardIdx = null;
                         updateUI();
                     } else if (state.actionMode === 'attack') {
-                        // 🌟 ルール適用: 攻撃宣言処理
                         activeUnit.hasAttacked = true;
-                        addLog(`あなたが攻撃を宣言！相手のカウンターを待っています...`);
+                        addLog(`あなたが攻撃を宣言！`);
                         sendAction({ type: 'ATTACK_DECLARE', from: state.selectedBoardIdx, to: idx });
                         executeAttack(state.selectedBoardIdx, idx);
                         state.selectedBoardIdx = null;
@@ -498,21 +472,24 @@
 
         function executeAttack(fromIdx, toIdx) {
             const attacker = state.board[fromIdx];
-            const target = state.board[toIdx];
-            if (target) {
-                target.hp -= attacker.atk;
-                addLog(`${target.name} に ${attacker.atk} ダメージ！`);
-                if (target.hp <= 0) {
-                    addLog(`${target.name} が撃破されました。`);
-                    state.board[toIdx] = null;
-                }
+            if (!attacker) return;
+
+            // 🌟 最奥行からのダイレクトアタック（自分自身をタップした場合）
+            if (fromIdx === toIdx) {
+                const oppRole = attacker.owner === 'p1' ? 'p2' : 'p1';
+                state.hp[oppRole] = Math.max(0, state.hp[oppRole] - attacker.atk);
+                addLog(`最奥行からダイレクトアタック！相手に ${attacker.atk} ダメージ！`);
+                checkWinCondition();
             } else {
-                const isDirectAttack = (state.role === 'p1' && toIdx <= 3) || (state.role === 'p2' && toIdx >= 12);
-                if (isDirectAttack) {
-                    const oppRole = state.role === 'p1' ? 'p2' : 'p1';
-                    state.hp[oppRole] = Math.max(0, state.hp[oppRole] - attacker.atk);
-                    addLog(`相手にダイレクトアタック！ ${attacker.atk} ダメージ！`);
-                    checkWinCondition();
+                // 通常のユニットへの攻撃
+                const target = state.board[toIdx];
+                if (target) {
+                    target.hp -= attacker.atk;
+                    addLog(`${target.name} に ${attacker.atk} ダメージ！`);
+                    if (target.hp <= 0) {
+                        addLog(`${target.name} が撃破されました。`);
+                        state.board[toIdx] = null;
+                    }
                 }
             }
             updateUI();
@@ -527,19 +504,14 @@
             updateUI();
         }
 
-        // 🌟 向き変更（右に90度回転）ボタンの制限
         document.getElementById('btn-rotate').addEventListener('click', () => {
             if (!state.isMyTurn || state.selectedBoardIdx === null) return;
             const unit = state.board[state.selectedBoardIdx];
             if (unit && unit.owner === state.role) {
-                // 🌟 ルール適用: 移動した後は、向きチェンジ不可
-                if (unit.hasMoved) {
-                    alert("移動した後のユニットは向きを変更できません！");
-                    return;
-                }
+                if (unit.hasMoved) return alert("移動した後のユニットは向きを変更できません！");
                 unit.dir = (unit.dir + 1) % 4;
-                unit.hasRotated = true; // 向きを変更したフラグ（これでこのターン移動は不可になる）
-                addLog(`ユニットの向きを変更しました。(移動権は消失)`);
+                unit.hasRotated = true;
+                addLog(`ユニットの向きを変更しました。`);
                 sendAction({ type: 'ROTATE', idx: state.selectedBoardIdx, dir: unit.dir });
                 updateUI();
             }
@@ -561,9 +533,7 @@
             switch(action.type) {
                 case 'SUMMON':
                     state.board[action.idx] = { 
-                        ...action.card, 
-                        owner: state.turnOwner, 
-                        dir: action.dir,
+                        ...action.card, owner: state.turnOwner, dir: action.dir,
                         hasMoved: false, hasRotated: false, hasAttacked: false 
                     };
                     addLog(`相手が ${action.card.name} を召喚しました。`);
@@ -583,7 +553,8 @@
                     break;
                 case 'ATTACK_DECLARE':
                     if(state.board[action.from]) state.board[action.from].hasAttacked = true;
-                    addLog(`相手から攻撃宣言！カウンターがあれば発動可能。`);
+                    addLog(action.from === action.to ? `相手が最奥行からダイレクトアタック！` : `相手から攻撃宣言！カウンター`);
+                    executeAttack(action.from, action.to);
                     break;
                 case 'COUNTER':
                     addLog(`相手がカウンター [${action.card.name}] を使用しました！`);
@@ -596,9 +567,9 @@
                     state.turnCount++;
                     if (state.turnCount >= 4) state.maxSummons = 2;
                     
-                    resetUnitActions(); // 🌟 自分のターン開始時にユニットの行動制限を全解除
+                    resetUnitActions();
                     triggerYourTurnBanner();
-                    addLog(`あなたのターンです！ (ドロー)`);
+                    addLog(`あなたのターンです！`);
                     
                     state.hand.push({ ...CARD_DATA[Math.floor(Math.random() * CARD_DATA.length)] });
                     break;
