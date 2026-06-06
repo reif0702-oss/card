@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>P2P Grid Tactics</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
     <style>
@@ -10,6 +10,21 @@
             --grid-size: 5;
             --cell-size: 65px;
         }
+        
+        /* 画面全体の謎の文字選択と長押しメニューを完全に無効化 */
+        * {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        /* 入力欄と、コピーさせたい部屋番号だけは文字選択を許可 */
+        input, .selectable {
+            -webkit-touch-callout: default;
+            -webkit-user-select: auto;
+            user-select: auto;
+        }
+
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
             margin: 0;
@@ -19,9 +34,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            -webkit-user-select: none;
-            user-select: none;
-            touch-action: none; /* スマホの無駄な画面スクロールを防止 */
+            /* ここにあった touch-action: none; を削除し、画面スクロールを復活 */
         }
         
         #setup-screen {
@@ -34,6 +47,7 @@
             padding: 20px;
             border-radius: 8px;
             box-sizing: border-box;
+            margin-top: 20px;
         }
         #setup-screen h1 { text-align: center; margin: 0 0 10px 0; font-size: 1.8rem; }
         .setup-group {
@@ -79,7 +93,8 @@
             display: grid; grid-template-columns: repeat(var(--grid-size), var(--cell-size));
             grid-template-rows: repeat(var(--grid-size), var(--cell-size));
             gap: 4px; background: #111; padding: 4px; border-radius: 8px; margin: 0 auto;
-            touch-action: none; /* 盤面上での誤スクロールを完全カット */
+            /* 盤面の上をスワイプした時だけはスクロールさせず、ユニット移動に集中させる */
+            touch-action: none; 
         }
         .cell {
             background: #333; border-radius: 4px; position: relative;
@@ -146,7 +161,7 @@
         <div class="setup-group">
             <button id="btn-create-room">部屋を作る (ホスト)</button>
             <div id="room-id-area" style="display:none; text-align:center; margin-top:10px;">
-                <div id="display-room-id" style="font-size:1.5rem; font-weight:bold; color:#f1c40f;">-------</div>
+                <div id="display-room-id" class="selectable" style="font-size:1.5rem; font-weight:bold; color:#f1c40f;">-------</div>
             </div>
         </div>
         <div class="setup-group">
@@ -239,14 +254,13 @@
                 const i = state.role === 'p1' ? v : 24 - v;
                 const c = document.createElement('div');
                 c.className = 'cell';
-                c.dataset.idx = i; // 🌟 座標割り出し用のカスタムデータ属性
+                c.dataset.idx = i; 
                 if (i >= 20) c.classList.add('spawn-zone-p1');
                 if (i <= 4) c.classList.add('spawn-zone-p2');
                 c.onclick = () => onCellClick(i);
                 b.appendChild(c);
             }
             
-            // 🌟 スマホ・PCハイブリッド対応のスライド移動イベントリスナー群
             b.addEventListener('pointerdown', (e) => {
                 const cell = e.target.closest('.cell');
                 if (!cell || !state.isMyTurn || state.isGameOver || state.phase !== 'action') return;
@@ -270,7 +284,6 @@
             b.addEventListener('pointermove', (e) => {
                 if (state.dragStartIdx === null) return;
                 
-                // 🌟 現在の指（またはマウス）の下にある要素を座標からリアルタイム取得
                 const targetEl = document.elementFromPoint(e.clientX, e.clientY);
                 if (!targetEl) return;
                 const cell = targetEl.closest('.cell');
@@ -278,17 +291,15 @@
                 
                 const idx = parseInt(cell.dataset.idx);
                 const fromIdx = state.currentDragIdx;
-                if (idx === fromIdx) return; // 同じマスならスキップ
+                if (idx === fromIdx) return;
                 
                 const movingUnit = state.board[fromIdx];
                 if (!movingUnit || movingUnit.owner !== state.role) return;
 
-                // 隣接判定（1マスずつスライドしているか）
                 const r1 = Math.floor(fromIdx / 5), c1 = fromIdx % 5;
                 const r2 = Math.floor(idx / 5), c2 = idx % 5;
                 const isAdjacent = Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1;
 
-                // 移動先が空、かつ該当ユニットの移動力上限を超えていなければ仮移動
                 if (isAdjacent && !state.board[idx] && state.tempMovedCount < movingUnit.move) {
                     state.tempMovedCount++;
                     state.board[idx] = movingUnit;
@@ -299,7 +310,6 @@
                 }
             });
 
-            // 🌟 指やマウスを離した瞬間に、確定した最終結果を1発だけ同期送信（フリーズ対策）
             window.addEventListener('pointerup', () => {
                 if (state.dragStartIdx !== null) {
                     const u = state.board[state.currentDragIdx];
@@ -423,7 +433,6 @@
             const targets = [];
             if (!unit || unit.hasMoved || unit.hasRotated || state.isGameOver) return targets;
             
-            // ドラッグ状況に合わせて残りの歩数をリアルタイム計算
             const currentMoved = state.dragStartIdx !== null ? state.tempMovedCount : (unit.movedCount || 0);
             const remMove = unit.move - currentMoved;
             if (remMove <= 0) return targets;
@@ -478,99 +487,4 @@
                 if (activeU && !activeU.hasAttacked) {
                     const targets = getAttackTargets(state.selectedBoardIdx, activeU);
                     if (targets.includes(idx) || idx === state.selectedBoardIdx) {
-                        activeU.hasAttacked = true;
-                        sendAction({ type: 'ATTACK_ALL', from: state.selectedBoardIdx });
-                        executeAttackAll(state.selectedBoardIdx);
-                        state.selectedBoardIdx = null;
-                        state.actionMode = 'move';
-                        updateUI();
-                    }
-                }
-            }
-        }
-
-        function executeAttackAll(from) {
-            const atkU = state.board[from]; if (!atkU) return;
-            const targets = getAttackTargets(from, atkU);
-
-            targets.forEach(t => {
-                if (from === t) {
-                    const targetPlayer = atkU.owner === 'p1' ? 'p2' : 'p1';
-                    state.hp[targetPlayer] = Math.max(0, state.hp[targetPlayer] - atkU.atk);
-                } else {
-                    const tarU = state.board[t];
-                    if (tarU && tarU.owner !== atkU.owner) {
-                        tarU.hp -= atkU.atk;
-                        if (tarU.hp <= 0) state.board[t] = null;
-                    }
-                }
-            });
-            updateUI();
-
-            if (state.hp.p1 <= 0 || state.hp.p2 <= 0) {
-                state.isGameOver = true;
-                updateUI();
-                showGameOverScreen();
-            }
-        }
-
-        document.getElementById('btn-rotate').onclick = () => {
-            if (state.isGameOver) return;
-            const u = state.board[state.selectedBoardIdx];
-            if (u && (u.movedCount || 0) === 0 && !u.hasRotated) {
-                u.dir = (u.dir + 1) % 4; u.hasRotated = true;
-                sendAction({ type: 'ROTATE', idx: state.selectedBoardIdx, dir: u.dir });
-                state.selectedBoardIdx = null; 
-                updateUI();
-            }
-        };
-
-        document.getElementById('btn-end-turn').onclick = () => {
-            if (state.isGameOver) return;
-            state.isMyTurn = false;
-            const nextOwner = state.role === 'p1' ? 'p2' : 'p1';
-            state.turnOwner = nextOwner;
-            if (nextOwner === state.firstTurn) state.turnCount++;
-            sendAction({ type: 'END_TURN', nextTurnCount: state.turnCount });
-            triggerTurnBanner("Enemy Turn", false); 
-            updateUI();
-        };
-
-        document.getElementById('btn-mode-attack').onclick = () => { 
-            if(!state.isGameOver) { 
-                state.actionMode = state.actionMode === 'attack' ? 'move' : 'attack'; 
-                updateUI(); 
-            } 
-        };
-
-        function handleRemoteAction(a) {
-            if (a.type === 'START_GAME') { initGame(a.firstTurn); return; }
-            if (a.type === 'SUMMON') state.board[a.idx] = { ...a.card, owner: state.role==='p1'?'p2':'p1', dir: a.dir, movedCount:0, hasMoved:false, hasRotated:false, hasAttacked:false };
-            if (a.type === 'MOVE') { 
-                // 🌟 受信側でもユニットの状態を完全に同期
-                const u = state.board[a.from];
-                if (u) {
-                    u.movedCount = a.movedCount;
-                    u.hasMoved = a.hasMoved;
-                    state.board[a.to] = u; 
-                    state.board[a.from] = null; 
-                }
-            }
-            if (a.type === 'ROTATE') state.board[a.idx].dir = a.dir;
-            if (a.type === 'ATTACK_ALL') executeAttackAll(a.from);
-            if (a.type === 'END_TURN') {
-                state.isMyTurn = true; 
-                state.turnOwner = state.role;
-                state.phase = 'summon'; 
-                state.summonsThisTurn = 0;
-                state.board.forEach(u => { if(u && u.owner === state.role) { u.movedCount=0; u.hasMoved=false; u.hasRotated=false; u.hasAttacked=false; }});
-                state.hand.push({...CARD_DATA[Math.floor(Math.random()*4)]});
-                state.turnCount = a.nextTurnCount || state.turnCount;
-                if (state.role === state.firstTurn && !a.nextTurnCount) state.turnCount++;
-                triggerTurnBanner("Your Turn", true); 
-            }
-            updateUI();
-        }
-    </script>
-</body>
-</html>
+                        activeU.hasAttacked
