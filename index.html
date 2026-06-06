@@ -487,4 +487,98 @@
                 if (activeU && !activeU.hasAttacked) {
                     const targets = getAttackTargets(state.selectedBoardIdx, activeU);
                     if (targets.includes(idx) || idx === state.selectedBoardIdx) {
-                        activeU.hasAttacked
+                        activeU.hasAttacked = true;
+                        sendAction({ type: 'ATTACK_ALL', from: state.selectedBoardIdx });
+                        executeAttackAll(state.selectedBoardIdx);
+                        state.selectedBoardIdx = null;
+                        state.actionMode = 'move';
+                        updateUI();
+                    }
+                }
+            }
+        }
+
+        function executeAttackAll(from) {
+            const atkU = state.board[from]; if (!atkU) return;
+            const targets = getAttackTargets(from, atkU);
+
+            targets.forEach(t => {
+                if (from === t) {
+                    const targetPlayer = atkU.owner === 'p1' ? 'p2' : 'p1';
+                    state.hp[targetPlayer] = Math.max(0, state.hp[targetPlayer] - atkU.atk);
+                } else {
+                    const tarU = state.board[t];
+                    if (tarU && tarU.owner !== atkU.owner) {
+                        tarU.hp -= atkU.atk;
+                        if (tarU.hp <= 0) state.board[t] = null;
+                    }
+                }
+            });
+            updateUI();
+
+            if (state.hp.p1 <= 0 || state.hp.p2 <= 0) {
+                state.isGameOver = true;
+                updateUI();
+                showGameOverScreen();
+            }
+        }
+
+        document.getElementById('btn-rotate').onclick = () => {
+            if (state.isGameOver) return;
+            const u = state.board[state.selectedBoardIdx];
+            if (u && (u.movedCount || 0) === 0 && !u.hasRotated) {
+                u.dir = (u.dir + 1) % 4; u.hasRotated = true;
+                sendAction({ type: 'ROTATE', idx: state.selectedBoardIdx, dir: u.dir });
+                state.selectedBoardIdx = null; 
+                updateUI();
+            }
+        };
+
+        document.getElementById('btn-end-turn').onclick = () => {
+            if (state.isGameOver) return;
+            state.isMyTurn = false;
+            const nextOwner = state.role === 'p1' ? 'p2' : 'p1';
+            state.turnOwner = nextOwner;
+            if (nextOwner === state.firstTurn) state.turnCount++;
+            sendAction({ type: 'END_TURN', nextTurnCount: state.turnCount });
+            triggerTurnBanner("Enemy Turn", false); 
+            updateUI();
+        };
+
+        document.getElementById('btn-mode-attack').onclick = () => { 
+            if(!state.isGameOver) { 
+                state.actionMode = state.actionMode === 'attack' ? 'move' : 'attack'; 
+                updateUI(); 
+            } 
+        };
+
+        function handleRemoteAction(a) {
+            if (a.type === 'START_GAME') { initGame(a.firstTurn); return; }
+            if (a.type === 'SUMMON') state.board[a.idx] = { ...a.card, owner: state.role==='p1'?'p2':'p1', dir: a.dir, movedCount:0, hasMoved:false, hasRotated:false, hasAttacked:false };
+            if (a.type === 'MOVE') { 
+                const u = state.board[a.from];
+                if (u) {
+                    u.movedCount = a.movedCount;
+                    u.hasMoved = a.hasMoved;
+                    state.board[a.to] = u; 
+                    state.board[a.from] = null; 
+                }
+            }
+            if (a.type === 'ROTATE') state.board[a.idx].dir = a.dir;
+            if (a.type === 'ATTACK_ALL') executeAttackAll(a.from);
+            if (a.type === 'END_TURN') {
+                state.isMyTurn = true; 
+                state.turnOwner = state.role;
+                state.phase = 'summon'; 
+                state.summonsThisTurn = 0;
+                state.board.forEach(u => { if(u && u.owner === state.role) { u.movedCount=0; u.hasMoved=false; u.hasRotated=false; u.hasAttacked=false; }});
+                state.hand.push({...CARD_DATA[Math.floor(Math.random()*4)]});
+                state.turnCount = a.nextTurnCount || state.turnCount;
+                if (state.role === state.firstTurn && !a.nextTurnCount) state.turnCount++;
+                triggerTurnBanner("Your Turn", true); 
+            }
+            updateUI();
+        }
+    </script>
+</body>
+</html>
