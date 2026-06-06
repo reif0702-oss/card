@@ -23,7 +23,6 @@
             user-select: none;
         }
         
-        /* 接続画面 */
         #setup-screen {
             display: flex;
             flex-direction: column;
@@ -44,15 +43,18 @@
             background: #343444;
             border-radius: 6px;
         }
-        input { padding: 10px; background: #1e1e24; color: #fff; border: 1px solid #555; border-radius: 4px; font-size: 1.1rem; text-align: center; letter-spacing: 2px; }
-        button { padding: 12px; background: #4a90e2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 1rem; }
-        button:hover { background: #357abd; }
-        .room-id-display { font-size: 1.5rem; font-weight: bold; color: #f1c40f; text-align: center; margin: 5px 0; letter-spacing: 2px;}
+        input { padding: 10px; background: #1e1e24; color: #fff; border: 1px solid #555; border-radius: 4px; font-size: 1.1rem; text-align: center; }
+        button { padding: 12px; background: #4a90e2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: opacity 0.3s, background 0.3s; }
+        button:hover:not(:disabled) { background: #357abd; }
+        
+        /* 🌟 ボタン無効時のスタイル（半透明） */
+        button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
 
-        /* ゲーム画面（プレイ中はロゴなし） */
         #game-screen { display: none; width: 100%; max-width: 400px; flex-direction: column; gap: 8px; }
         
-        /* 数字のみのシンプルライフ表示 */
         .hp-display-box {
             font-size: 2.8rem;
             font-weight: bold;
@@ -60,69 +62,46 @@
             padding: 2px 0;
             line-height: 1;
             text-shadow: 0 2px 4px rgba(0,0,0,0.6);
-            letter-spacing: 1px;
         }
         .opp-hp-color { color: #e74c3c; } 
         .my-hp-color { color: #2ecc71; }  
 
-        .status-bar { display: flex; justify-content: space-between; background: #2a2a35; padding: 8px 12px; border-radius: 8px; font-size: 0.85rem; transition: background 0.3s, border 0.3s; }
-        .status-bar.my-turn { background: #1e3d2f; border: 2px solid #2ecc71; box-sizing: border-box; }
-        .status-bar.opp-turn { background: #3d1e1e; border: 2px solid #e74c3c; box-sizing: border-box; }
+        .status-bar { display: flex; justify-content: space-between; background: #2a2a35; padding: 8px 12px; border-radius: 8px; font-size: 0.85rem; border: 2px solid transparent; }
+        .status-bar.my-turn { background: #1e3d2f; border-color: #2ecc71; }
+        .status-bar.opp-turn { background: #3d1e1e; border-color: #e74c3c; }
 
-        /* 「Your Turn」ポップアップバナー */
         #your-turn-banner {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0);
-            background: rgba(46, 204, 113, 0.95);
-            color: white;
-            padding: 20px 50px;
-            font-size: 2.5rem;
-            font-weight: bold;
-            border-radius: 12px;
-            z-index: 100;
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
+            background: rgba(46, 204, 113, 0.95); color: white; padding: 20px 50px;
+            font-size: 2.5rem; font-weight: bold; border-radius: 12px; z-index: 100;
             transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
-            opacity: 0;
-            pointer-events: none;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            opacity: 0; pointer-events: none; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         #your-turn-banner.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
         
-        /* 盤面 */
         #board {
-            display: grid;
-            grid-template-columns: repeat(var(--grid-size), var(--cell-size));
+            display: grid; grid-template-columns: repeat(var(--grid-size), var(--cell-size));
             grid-template-rows: repeat(var(--grid-size), var(--cell-size));
-            gap: 4px;
-            background: #111;
-            padding: 4px;
-            border-radius: 8px;
-            margin: 0 auto;
+            gap: 4px; background: #111; padding: 4px; border-radius: 8px; margin: 0 auto;
         }
         .cell {
-            background: #333;
-            border-radius: 4px;
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
+            background: #333; border-radius: 4px; position: relative;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
         }
         .cell.spawn-zone-p1 { background: #223322; border: 1px dashed #44aa44; }
         .cell.spawn-zone-p2 { background: #332222; border: 1px dashed #aa4444; }
         .cell.highlight-move { background: #34495e; border: 2px solid #3498db; }
         .cell.highlight-attack { background: #5c2525; border: 2px solid #e74c3c; }
 
-        /* ユニット */
         .unit { width: 85%; height: 85%; position: relative; display: flex; align-items: center; justify-content: center; transition: opacity 0.3s; }
-        .unit.exhausted { opacity: 0.4; }
+        
+        /* 🌟 攻撃後のユニットのみ半透明にする */
+        .unit.has-attacked { opacity: 0.4; }
+
         .unit-body {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             clip-path: polygon(50% 0%, 100% 25%, 100% 100%, 0% 100%, 0% 25%);
-            z-index: 1;
-            transition: transform 0.25s ease;
+            z-index: 1; transition: transform 0.25s ease;
         }
         .unit.p1 .unit-body { background: #2ecc71; box-shadow: inset 0 -5px 10px rgba(0,0,0,0.4); }
         .unit.p2 .unit-body { background: #e74c3c; box-shadow: inset 0 -5px 10px rgba(0,0,0,0.4); }
@@ -131,13 +110,11 @@
             text-shadow: 1px 1px 3px rgba(0,0,0,0.9); pointer-events: none; margin-top: 8px;
         }
 
-        /* 向き */
         .dir-0 { transform: rotate(0deg); }   
         .dir-1 { transform: rotate(90deg); }  
         .dir-2 { transform: rotate(180deg); } 
         .dir-3 { transform: rotate(270deg); } 
 
-        /* カード・操作UI */
         #hand { display: flex; gap: 8px; justify-content: center; margin-top: 5px; min-height: 80px;}
         .card { width: 70px; background: #2a2a35; border: 2px solid #555; border-radius: 6px; padding: 5px; font-size: 0.7rem; text-align: center; cursor: pointer; }
         .card.selected { border-color: #f1c40f; background: #3a3a4c; }
@@ -154,42 +131,31 @@
         <div class="setup-group">
             <button id="btn-create-room">部屋を作る (ホスト)</button>
             <div id="room-id-area" style="display:none; text-align:center; margin-top:10px;">
-                <span>対戦相手にこの7桁を伝えてください:</span>
-                <div id="display-room-id" class="room-id-display">-------</div>
-                <span style="font-size:0.8rem; color:#aaa;">相手の接続を待っています...</span>
+                <div id="display-room-id" style="font-size:1.5rem; font-weight:bold; color:#f1c40f;">-------</div>
             </div>
         </div>
-        <div style="text-align: center; font-weight: bold; color: #888;">または</div>
         <div class="setup-group">
-            <label for="input-room-id">部屋番号(7桁)を入力して参加:</label>
-            <input type="text" id="input-room-id" maxlength="7" placeholder="X1Y2Z3A">
-            <button id="btn-join-room" style="background:#2ecc71; margin-top:10px;">部屋に入る (ゲスト)</button>
+            <input type="text" id="input-room-id" maxlength="7" placeholder="部屋番号を入力">
+            <button id="btn-join-room" style="background:#2ecc71;">部屋に入る (ゲスト)</button>
         </div>
     </div>
 
     <div id="game-screen">
         <div id="opp-hp" class="hp-display-box opp-hp-color">10</div>
-        
         <div id="turn-bar" class="status-bar">
             <div>ターン: <span id="current-turn">-</span></div>
-            <div>フェーズ: <span id="current-phase">召喚</span> (<span id="summon-count">0</span>枚)</div>
+            <div>フェーズ: <span id="current-phase">召喚</span></div>
         </div>
-
         <div id="board"></div>
-
         <div id="my-hp" class="hp-display-box my-hp-color">10</div>
-
         <div id="controls">
             <button id="btn-mode-move">移動</button>
             <button id="btn-mode-attack">攻撃</button>
             <button id="btn-rotate" style="background:#9b59b6;">右回転</button>
             <button id="btn-end-turn" style="background:#e67e22;">ターン終了</button>
         </div>
-
-        <div>手札 (自陣5マスの点線に召喚):</div>
         <div id="hand"></div>
-        
-        <div id="log">ゲーム開始を待っています...</div>
+        <div id="log"></div>
     </div>
 
     <script>
@@ -198,33 +164,20 @@
             { id: 'u1', name: 'ソルジャー', type: 'unit', hp: 4, atk: 2, move: 1, range: 1 },
             { id: 'u2', name: 'スカウト', type: 'unit', hp: 3, atk: 1, move: 2, range: 1 },
             { id: 'u3', name: 'アーチャー', type: 'unit', hp: 2, atk: 1, move: 1, range: 2 },
-            { id: 'c1', name: '妨害(カウンター)', type: 'counter', desc: '移動を阻害' }
+            { id: 'c1', name: '妨害', type: 'counter', desc: '移動を阻害' }
         ];
 
         let state = {
-            role: null, 
-            isMyTurn: false,
-            turnOwner: 'p1',
-            phase: 'summon',
-            summonsThisTurn: 0,
-            maxSummons: 1,
-            turnCount: 1,
-            hp: { p1: 10, p2: 10 },
-            board: Array(GRID_SIZE * GRID_SIZE).fill(null), 
-            hand: [],
-            selectedCardIdx: null,
-            selectedBoardIdx: null,
-            actionMode: 'move'
+            role: null, isMyTurn: false, turnOwner: 'p1', phase: 'summon',
+            summonsThisTurn: 0, maxSummons: 1, turnCount: 1,
+            hp: { p1: 10, p2: 10 }, board: Array(25).fill(null), hand: [],
+            selectedCardIdx: null, selectedBoardIdx: null, actionMode: 'move'
         };
 
-        let peer = null;
-        let conn = null;
+        let peer = null, conn = null;
 
         function generateRoomId() {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-            let result = '';
-            for (let i = 0; i < 7; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
-            return result;
+            return Math.random().toString(36).substring(2, 9).toUpperCase();
         }
 
         document.getElementById('btn-create-room').addEventListener('click', () => {
@@ -234,14 +187,12 @@
             peer.on('open', (id) => {
                 document.getElementById('display-room-id').innerText = id;
                 document.getElementById('room-id-area').style.display = 'block';
-                document.getElementById('btn-create-room').disabled = true;
             });
-            peer.on('connection', (connection) => { conn = connection; setupConnection(); });
+            peer.on('connection', (c) => { conn = c; setupConnection(); });
         });
 
         document.getElementById('btn-join-room').addEventListener('click', () => {
             const roomId = document.getElementById('input-room-id').value.trim().toUpperCase();
-            if (roomId.length !== 7) return alert("7桁の部屋番号を入力してください");
             state.role = 'p2';
             peer = new Peer();
             peer.on('open', () => { conn = peer.connect(roomId); setupConnection(); });
@@ -253,163 +204,114 @@
                 document.getElementById('game-screen').style.display = 'flex';
                 initGame();
             });
-            conn.on('data', (data) => { handleRemoteAction(data); });
+            conn.on('data', handleRemoteAction);
         }
 
-        function sendAction(action) {
-            if (conn && conn.open) conn.send(action);
-        }
+        function sendAction(a) { if (conn?.open) conn.send(a); }
 
         function initGame() {
-            addLog("対戦が開始されました！");
             state.isMyTurn = (state.role === 'p1');
-            state.hand = [ { ...CARD_DATA[0] }, { ...CARD_DATA[1] }, { ...CARD_DATA[2] }, { ...CARD_DATA[3] } ];
-            createBoardUI();
+            state.hand = [ {...CARD_DATA[0]}, {...CARD_DATA[1]}, {...CARD_DATA[2]}, {...CARD_DATA[3]} ];
+            const b = document.getElementById('board');
+            b.innerHTML = '';
+            for (let v=0; v<25; v++) {
+                const i = state.role === 'p1' ? v : 24 - v;
+                const c = document.createElement('div');
+                c.className = 'cell';
+                if (i >= 20) c.classList.add('spawn-zone-p1');
+                if (i <= 4) c.classList.add('spawn-zone-p2');
+                c.onclick = () => onCellClick(i);
+                b.appendChild(c);
+            }
             updateUI();
             if (state.isMyTurn) triggerYourTurnBanner();
         }
 
-        function createBoardUI() {
-            const boardEl = document.getElementById('board');
-            boardEl.innerHTML = '';
-            for (let v = 0; v < GRID_SIZE * GRID_SIZE; v++) {
-                const i = state.role === 'p1' ? v : 24 - v; 
-                const cell = document.createElement('div');
-                cell.className = 'cell';
-                if (i >= 20) cell.classList.add('spawn-zone-p1'); 
-                if (i <= 4) cell.classList.add('spawn-zone-p2');  
-                cell.addEventListener('click', () => onCellClick(i));
-                boardEl.appendChild(cell);
-            }
-        }
-
         function triggerYourTurnBanner() {
-            const banner = document.getElementById('your-turn-banner');
-            banner.classList.add('show');
-            setTimeout(() => { banner.classList.remove('show'); }, 1500);
-        }
-
-        function resetUnitActions() {
-            state.board.forEach(unit => {
-                if (unit && unit.owner === state.role) {
-                    unit.hasMoved = false;
-                    unit.hasRotated = false;
-                    unit.hasAttacked = false;
-                }
-            });
+            const b = document.getElementById('your-turn-banner');
+            b.classList.add('show');
+            setTimeout(() => b.classList.remove('show'), 1500);
         }
 
         function updateUI() {
             document.getElementById('my-hp').innerText = state.hp[state.role];
             document.getElementById('opp-hp').innerText = state.hp[state.role === 'p1' ? 'p2' : 'p1'];
             
-            document.getElementById('current-phase').innerText = state.phase === 'summon' ? '召喚' : 'アクション';
-            document.getElementById('summon-count').innerText = state.summonsThisTurn;
+            const tb = document.getElementById('turn-bar');
+            tb.className = `status-bar ${state.isMyTurn ? 'my-turn' : 'opp-turn'}`;
+            document.getElementById('current-turn').innerText = state.isMyTurn ? "あなたの番" : "相手の番";
 
-            const turnBar = document.getElementById('turn-bar');
-            if (state.isMyTurn) {
-                turnBar.className = "status-bar my-turn";
-                document.getElementById('current-turn').innerText = "あなたの番 (Your Turn)";
-            } else {
-                turnBar.className = "status-bar opp-turn";
-                document.getElementById('current-turn').innerText = "相手の番 (Opponent Turn)";
-            }
+            // 🌟 操作ボタンの動的制御
+            const activeUnit = state.selectedBoardIdx !== null ? state.board[state.selectedBoardIdx] : null;
+            const canControl = state.isMyTurn && activeUnit && activeUnit.owner === state.role;
+            
+            document.getElementById('btn-mode-move').disabled = !canControl || activeUnit.hasMoved || activeUnit.hasRotated;
+            document.getElementById('btn-mode-attack').disabled = !canControl || activeUnit.hasAttacked;
+            document.getElementById('btn-rotate').disabled = !canControl || activeUnit.hasMoved || activeUnit.hasRotated;
+            document.getElementById('btn-end-turn').disabled = !state.isMyTurn;
 
             document.getElementById('btn-mode-move').style.background = state.actionMode === 'move' ? '#2980b9' : '#34495e';
             document.getElementById('btn-mode-attack').style.background = state.actionMode === 'attack' ? '#c0392b' : '#34495e';
 
-            const boardEl = document.getElementById('board');
-            for (let v = 0; v < GRID_SIZE * GRID_SIZE; v++) {
-                const i = state.role === 'p1' ? v : 24 - v; 
-                const cell = boardEl.children[v];
+            const b = document.getElementById('board');
+            const validTargets = activeUnit ? getValidTargets(state.selectedBoardIdx, activeUnit) : [];
+
+            for (let v=0; v<25; v++) {
+                const i = state.role === 'p1' ? v : 24 - v;
+                const cell = b.children[v];
                 cell.innerHTML = '';
                 cell.classList.remove('highlight-move', 'highlight-attack');
 
-                const unit = state.board[i];
-                if (unit) {
-                    const unitEl = document.createElement('div');
-                    const displayDir = state.role === 'p2' ? (unit.dir + 2) % 4 : unit.dir;
-                    const isExhausted = (unit.hasMoved || unit.hasRotated) && unit.hasAttacked;
-                    
-                    unitEl.className = `unit ${unit.owner} ${isExhausted ? 'exhausted' : ''}`;
-                    unitEl.innerHTML = `
-                        <div class="unit-body dir-${displayDir}"></div>
-                        <div class="unit-text">${unit.name}<br>${unit.atk}/${unit.hp}</div>
-                    `;
-                    cell.appendChild(unitEl);
+                const u = state.board[i];
+                if (u) {
+                    const el = document.createElement('div');
+                    const rot = state.role === 'p2' ? (u.dir + 2) % 4 : u.dir;
+                    // 🌟 攻撃済みなら半透明クラスを付与
+                    el.className = `unit ${u.owner} ${u.hasAttacked ? 'has-attacked' : ''}`;
+                    el.innerHTML = `<div class="unit-body dir-${rot}"></div><div class="unit-text">${u.name}<br>${u.atk}/${u.hp}</div>`;
+                    cell.appendChild(el);
                 }
-
-                if (state.isMyTurn && state.selectedBoardIdx !== null) {
-                    const activeUnit = state.board[state.selectedBoardIdx];
-                    if (activeUnit && activeUnit.owner === state.role) {
-                        if (getValidTargets(state.selectedBoardIdx, activeUnit).includes(i)) {
-                            cell.classList.add(state.actionMode === 'move' ? 'highlight-move' : 'highlight-attack');
-                        }
-                    }
-                }
+                if (validTargets.includes(i)) cell.classList.add(state.actionMode === 'move' ? 'highlight-move' : 'highlight-attack');
             }
 
-            const handEl = document.getElementById('hand');
-            handEl.innerHTML = '';
-            state.hand.forEach((card, idx) => {
-                const cardEl = document.createElement('div');
-                cardEl.className = `card ${state.selectedCardIdx === idx ? 'selected' : ''}`;
-                cardEl.innerHTML = `<b>${card.name}</b><br>${card.type==='unit' ? `ATK:${card.atk} HP:${card.hp}` : card.desc}`;
-                cardEl.addEventListener('click', () => {
-                    if (!state.isMyTurn) return;
-                    state.selectedCardIdx = (state.selectedCardIdx === idx) ? null : idx;
-                    state.selectedBoardIdx = null;
-                    updateUI();
-                });
-                handEl.appendChild(cardEl);
+            const h = document.getElementById('hand');
+            h.innerHTML = '';
+            state.hand.forEach((c, idx) => {
+                const el = document.createElement('div');
+                el.className = `card ${state.selectedCardIdx === idx ? 'selected' : ''}`;
+                el.innerHTML = `<b>${c.name}</b><br>${c.type==='unit' ? `ATK:${c.atk}` : c.desc}`;
+                el.onclick = () => { if(state.isMyTurn) { state.selectedCardIdx = idx; state.selectedBoardIdx = null; updateUI(); }};
+                h.appendChild(el);
             });
         }
 
         function getValidTargets(idx, unit) {
             const targets = [];
-            if (state.actionMode === 'attack' && unit.hasAttacked) return [];
-            if (state.actionMode === 'move' && (unit.hasMoved || unit.hasRotated)) return [];
-
-            const r = Math.floor(idx / GRID_SIZE);
-            const c = idx % GRID_SIZE;
-            const dirVectors = [ [-1, 0], [0, 1], [1, 0], [0, -1] ]; 
-            const front = dirVectors[unit.dir];
-
+            const r = Math.floor(idx / 5), c = idx % 5;
             if (state.actionMode === 'move') {
-                const checkDirs = [ [-1,0], [1,0], [0,-1], [0,1] ];
-                checkDirs.forEach(([dr, dc]) => {
-                    for(let step=1; step<=unit.move; step++) {
-                        const nr = r + dr*step, nc = c + dc*step;
-                        if (nr>=0 && nr<GRID_SIZE && nc>=0 && nc<GRID_SIZE) {
-                            const nIdx = nr * GRID_SIZE + nc;
-                            if (!state.board[nIdx]) {
-                                targets.push(nIdx);
-                            } else {
-                                // 🌟【修正】進行方向にユニット（敵・味方問わず）がいた場合、それ以上進めない（すり抜け防止）
-                                break;
-                            }
-                        } else {
+                [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr, dc]) => {
+                    for(let s=1; s<=unit.move; s++) {
+                        const nr = r+dr*s, nc = c+dc*s;
+                        if (nr<0||nr>=5||nc<0||nc>=5) break;
+                        const nIdx = nr*5+nc, targetU = state.board[nIdx];
+                        if (!targetU) {
+                            targets.push(nIdx);
+                        } else if (targetU.owner !== unit.owner) {
+                            // 🌟 敵ユニットがいたらそこより先には行けない（すり抜け不可）
                             break;
                         }
+                        // 味方ユニットなら、そのマスには止まれないが通過は可能（ループ継続）
                     }
                 });
-            } else if (state.actionMode === 'attack') {
-                // 自分から見て一番遠い行（敵陣最奥5マス）にいる場合のみ、自分をタップしてダイレクト可能
-                const isAtFarthestRow = (state.role === 'p1' && idx < 5) || (state.role === 'p2' && idx >= 20);
-                if (isAtFarthestRow) {
-                    targets.push(idx); 
-                }
-
-                // 通常攻撃：範囲内に「敵ユニット」が存在するときのみ
-                for (let step = 1; step <= unit.range; step++) {
-                    const nr = r + front[0] * step;
-                    const nc = c + front[1] * step;
-                    if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE) {
-                        const nIdx = nr * GRID_SIZE + nc;
-                        const targetUnit = state.board[nIdx];
-                        if (targetUnit && targetUnit.owner !== state.role) {
-                            targets.push(nIdx);
-                        }
+            } else {
+                const isFarthest = (state.role === 'p1' && idx < 5) || (state.role === 'p2' && idx >= 20);
+                if (isFarthest) targets.push(idx);
+                const front = [[-1, 0], [0, 1], [1, 0], [0, -1]][unit.dir];
+                for(let s=1; s<=unit.range; s++) {
+                    const nr = r+front[0]*s, nc = c+front[1]*s;
+                    if (nr>=0&&nr<5&&nc>=0&&nc<5) {
+                        const nIdx = nr*5+nc;
+                        if (state.board[nIdx] && state.board[nIdx].owner !== unit.owner) targets.push(nIdx);
                     }
                 }
             }
@@ -417,195 +319,102 @@
         }
 
         function onCellClick(idx) {
-            if (!state.isMyTurn) {
-                if (state.selectedCardIdx !== null && state.hand[state.selectedCardIdx].type === 'counter') {
-                    executeCounter(idx);
-                }
-                return;
-            }
-
+            if (!state.isMyTurn) return;
             if (state.selectedCardIdx !== null && state.phase === 'summon') {
-                const card = state.hand[state.selectedCardIdx];
-                if (card.type !== 'unit') return;
-
-                const isSpawnZone = (state.role === 'p1' && idx >= 20) || (state.role === 'p2' && idx <= 4);
-                if (isSpawnZone && !state.board[idx]) {
-                    state.board[idx] = { 
-                        ...card, owner: state.role, dir: state.role === 'p1' ? 0 : 2,
-                        hasMoved: false, hasRotated: false, hasAttacked: false
-                    };
+                const isZone = (state.role === 'p1' && idx >= 20) || (state.role === 'p2' && idx <= 4);
+                if (isZone && !state.board[idx]) {
+                    const c = state.hand[state.selectedCardIdx];
+                    state.board[idx] = { ...c, owner: state.role, dir: state.role==='p1'?0:2, hasMoved:false, hasRotated:false, hasAttacked:false };
                     state.hand.splice(state.selectedCardIdx, 1);
                     state.summonsThisTurn++;
                     state.selectedCardIdx = null;
-                    
-                    addLog(`あなたが ${card.name} を召喚しました。`);
-                    sendAction({ type: 'SUMMON', idx, card, dir: state.board[idx].dir });
-
+                    sendAction({ type: 'SUMMON', idx, card: c, dir: state.board[idx].dir });
                     if (state.summonsThisTurn >= state.maxSummons) state.phase = 'action';
                     updateUI();
                 }
                 return;
             }
-
-            const clickedUnit = state.board[idx];
-
-            // 🌟【修正】ダイレクトアタックの判定を「通常選択」より最優先で割り込ませる
-            if (state.selectedBoardIdx === idx && state.actionMode === 'attack' && clickedUnit && clickedUnit.owner === state.role) {
-                const validTargets = getValidTargets(state.selectedBoardIdx, clickedUnit);
-                if (validTargets.includes(idx)) {
-                    clickedUnit.hasAttacked = true;
-                    addLog(`最奥行からダイレクトアタックを宣言！`);
-                    sendAction({ type: 'ATTACK_DECLARE', from: state.selectedBoardIdx, to: idx });
-                    executeAttack(state.selectedBoardIdx, idx);
+            
+            const u = state.board[idx];
+            if (state.selectedBoardIdx === idx && state.actionMode === 'attack' && u?.owner === state.role) {
+                if (getValidTargets(idx, u).includes(idx)) {
+                    u.hasAttacked = true;
+                    sendAction({ type: 'ATTACK_DECLARE', from: idx, to: idx });
+                    executeAttack(idx, idx);
                     state.selectedBoardIdx = null;
                     return;
                 }
             }
 
-            if (clickedUnit && clickedUnit.owner === state.role) {
+            if (u && u.owner === state.role) {
                 state.selectedBoardIdx = idx;
                 state.selectedCardIdx = null;
                 updateUI();
             } else if (state.selectedBoardIdx !== null) {
-                const activeUnit = state.board[state.selectedBoardIdx];
-                const validTargets = getValidTargets(state.selectedBoardIdx, activeUnit);
-                
-                if (validTargets.includes(idx)) {
+                const activeU = state.board[state.selectedBoardIdx];
+                if (getValidTargets(state.selectedBoardIdx, activeU).includes(idx)) {
                     if (state.actionMode === 'move') {
-                        activeUnit.hasMoved = true; 
-                        state.board[idx] = activeUnit;
-                        state.board[state.selectedBoardIdx] = null;
-                        addLog(`ユニットが移動しました。`);
+                        activeU.hasMoved = true;
+                        state.board[idx] = activeU; state.board[state.selectedBoardIdx] = null;
                         sendAction({ type: 'MOVE', from: state.selectedBoardIdx, to: idx });
                         state.selectedBoardIdx = null;
-                        updateUI();
-                    } else if (state.actionMode === 'attack') {
-                        activeUnit.hasAttacked = true;
-                        addLog(`あなたが攻撃を宣言！`);
+                    } else {
+                        activeU.hasAttacked = true;
                         sendAction({ type: 'ATTACK_DECLARE', from: state.selectedBoardIdx, to: idx });
                         executeAttack(state.selectedBoardIdx, idx);
                         state.selectedBoardIdx = null;
                     }
+                    updateUI();
                 }
             }
         }
 
-        function executeAttack(fromIdx, toIdx) {
-            const attacker = state.board[fromIdx];
-            if (!attacker) return;
-
-            // 最奥行からのダイレクトアタック（自分自身をタップした場合）
-            if (fromIdx === toIdx) {
-                const oppRole = attacker.owner === 'p1' ? 'p2' : 'p1';
-                state.hp[oppRole] = Math.max(0, state.hp[oppRole] - attacker.atk);
-                addLog(`最奥行からダイレクトアタック！相手に ${attacker.atk} ダメージ！`);
-                checkWinCondition();
+        function executeAttack(f, t) {
+            const atkU = state.board[f]; if (!atkU) return;
+            if (f === t) {
+                const opp = state.role === 'p1' ? 'p2' : 'p1';
+                state.hp[opp] = Math.max(0, state.hp[opp] - atkU.atk);
+                if (state.hp[opp] <= 0) alert("WIN!");
             } else {
-                // 通常のユニットへの攻撃
-                const target = state.board[toIdx];
-                if (target) {
-                    target.hp -= attacker.atk;
-                    addLog(`${target.name} に ${attacker.atk} ダメージ！`);
-                    if (target.hp <= 0) {
-                        addLog(`${target.name} が撃破されました。`);
-                        state.board[toIdx] = null;
-                    }
+                const tarU = state.board[t];
+                if (tarU) {
+                    tarU.hp -= atkU.atk;
+                    if (tarU.hp <= 0) state.board[t] = null;
                 }
             }
             updateUI();
         }
 
-        function executeCounter(targetIdx) {
-            const card = state.hand[state.selectedCardIdx];
-            addLog(`カウンター発動！ [${card.name}]`);
-            sendAction({ type: 'COUNTER', card: card, idx: targetIdx });
-            state.hand.splice(state.selectedCardIdx, 1);
-            state.selectedCardIdx = null;
-            updateUI();
-        }
-
-        document.getElementById('btn-rotate').addEventListener('click', () => {
-            if (!state.isMyTurn || state.selectedBoardIdx === null) return;
-            const unit = state.board[state.selectedBoardIdx];
-            if (unit && unit.owner === state.role) {
-                if (unit.hasMoved) return alert("移動した後のユニットは向きを変更できません！");
-                unit.dir = (unit.dir + 1) % 4;
-                unit.hasRotated = true;
-                addLog(`ユニットの向きを変更しました。`);
-                sendAction({ type: 'ROTATE', idx: state.selectedBoardIdx, dir: unit.dir });
+        document.getElementById('btn-rotate').onclick = () => {
+            const u = state.board[state.selectedBoardIdx];
+            if (u && !u.hasMoved) {
+                u.dir = (u.dir + 1) % 4; u.hasRotated = true;
+                sendAction({ type: 'ROTATE', idx: state.selectedBoardIdx, dir: u.dir });
                 updateUI();
             }
-        });
+        };
 
-        document.getElementById('btn-end-turn').addEventListener('click', () => {
-            if (!state.isMyTurn) return;
+        document.getElementById('btn-end-turn').onclick = () => {
             state.isMyTurn = false;
-            state.turnOwner = state.role === 'p1' ? 'p2' : 'p1';
             sendAction({ type: 'END_TURN' });
-            addLog("ターンを終了しました。");
             updateUI();
-        });
+        };
 
-        document.getElementById('btn-mode-move').addEventListener('click', () => { state.actionMode = 'move'; updateUI(); });
-        document.getElementById('btn-mode-attack').addEventListener('click', () => { state.actionMode = 'attack'; updateUI(); });
+        document.getElementById('btn-mode-move').onclick = () => { state.actionMode = 'move'; updateUI(); };
+        document.getElementById('btn-mode-attack').onclick = () => { state.actionMode = 'attack'; updateUI(); };
 
-        function handleRemoteAction(action) {
-            switch(action.type) {
-                case 'SUMMON':
-                    state.board[action.idx] = { 
-                        ...action.card, owner: state.turnOwner, dir: action.dir,
-                        hasMoved: false, hasRotated: false, hasAttacked: false 
-                    };
-                    addLog(`相手が ${action.card.name} を召喚しました。`);
-                    break;
-                case 'MOVE':
-                    if(state.board[action.from]) state.board[action.from].hasMoved = true;
-                    state.board[action.to] = state.board[action.from];
-                    state.board[action.from] = null;
-                    addLog(`相手のユニットが移動しました。`);
-                    break;
-                case 'ROTATE':
-                    if (state.board[action.idx]) {
-                        state.board[action.idx].dir = action.dir;
-                        state.board[action.idx].hasRotated = true;
-                    }
-                    addLog(`相手がユニットの向きを変更しました。`);
-                    break;
-                case 'ATTACK_DECLARE':
-                    if(state.board[action.from]) state.board[action.from].hasAttacked = true;
-                    addLog(action.from === action.to ? `相手が最奥行からダイレクトアタック！` : `相手から攻撃宣言！`);
-                    executeAttack(action.from, action.to);
-                    break;
-                case 'COUNTER':
-                    addLog(`相手がカウンター [${action.card.name}] を使用しました！`);
-                    break;
-                case 'END_TURN':
-                    state.isMyTurn = true;
-                    state.turnOwner = state.role;
-                    state.phase = 'summon';
-                    state.summonsThisTurn = 0;
-                    state.turnCount++;
-                    if (state.turnCount >= 4) state.maxSummons = 2;
-                    
-                    resetUnitActions();
-                    triggerYourTurnBanner();
-                    addLog(`あなたのターンです！`);
-                    
-                    state.hand.push({ ...CARD_DATA[Math.floor(Math.random() * CARD_DATA.length)] });
-                    break;
+        function handleRemoteAction(a) {
+            if (a.type === 'SUMMON') state.board[a.idx] = { ...a.card, owner: state.role==='p1'?'p2':'p1', dir: a.dir };
+            if (a.type === 'MOVE') { state.board[a.to] = state.board[a.from]; state.board[a.from] = null; }
+            if (a.type === 'ROTATE') state.board[a.idx].dir = a.dir;
+            if (a.type === 'ATTACK_DECLARE') executeAttack(a.from, a.to);
+            if (a.type === 'END_TURN') {
+                state.isMyTurn = true; state.phase = 'summon'; state.summonsThisTurn = 0;
+                state.board.forEach(u => { if(u && u.owner === state.role) { u.hasMoved=false; u.hasRotated=false; u.hasAttacked=false; }});
+                state.hand.push({...CARD_DATA[Math.floor(Math.random()*4)]});
+                triggerYourTurnBanner();
             }
             updateUI();
-        }
-
-        function checkWinCondition() {
-            if (state.hp.p1 <= 0) alert("プレイヤー2の勝利！");
-            if (state.hp.p2 <= 0) alert("プレイヤー1の勝利！");
-        }
-
-        function addLog(msg) {
-            const logEl = document.getElementById('log');
-            logEl.innerHTML += `<div>${msg}</div>`;
-            logEl.scrollTop = logEl.scrollHeight;
         }
     </script>
 </body>
