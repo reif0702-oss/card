@@ -90,10 +90,9 @@
         .cell.spawn-zone-p1 { background: #223322; border: 1px dashed #44aa44; }
         .cell.spawn-zone-p2 { background: #332222; border: 1px dashed #aa4444; }
         
-        /* 🌟 各種ハイライトカラー */
         .cell.highlight-move { background: #34495e; border: 2px solid #3498db; }
         .cell.highlight-attack { background: #5c2525; border: 2px solid #e74c3c; }
-        .cell.highlight-both { background: #48234e; border: 2px solid #9b59b6; } /* 綺麗な紫色 */
+        .cell.highlight-both { background: #48234e; border: 2px solid #9b59b6; } 
 
         .unit { width: 85%; height: 85%; position: relative; display: flex; align-items: center; justify-content: center; transition: opacity 0.3s; }
         .unit.has-attacked { opacity: 0.4; }
@@ -108,6 +107,7 @@
         .unit-text {
             position: relative; z-index: 2; color: white; font-size: 0.65rem; font-weight: bold; text-align: center;
             text-shadow: 1px 1px 3px rgba(0,0,0,0.9); pointer-events: none; margin-top: 8px;
+            line-height: 1.2;
         }
 
         .dir-0 { transform: rotate(0deg); }   
@@ -115,8 +115,8 @@
         .dir-2 { transform: rotate(180deg); } 
         .dir-3 { transform: rotate(270deg); } 
 
-        #hand { display: flex; gap: 8px; justify-content: center; margin-top: 5px; min-height: 80px;}
-        .card { width: 70px; background: #2a2a35; border: 2px solid #555; border-radius: 6px; padding: 5px; font-size: 0.7rem; text-align: center; cursor: pointer; }
+        #hand { display: flex; gap: 8px; justify-content: center; margin-top: 5px; min-height: 85px;}
+        .card { width: 75px; background: #2a2a35; border: 2px solid #555; border-radius: 6px; padding: 6px 4px; font-size: 0.7rem; text-align: center; cursor: pointer; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
         .card.selected { border-color: #f1c40f; background: #3a3a4c; }
         #controls { display: flex; justify-content: space-between; gap: 5px; }
         #log { background: #111; height: 60px; overflow-y: auto; font-size: 0.75rem; padding: 5px; border-radius: 4px; color: #aaa; }
@@ -268,7 +268,6 @@
 
             const b = document.getElementById('board');
             
-            // 🌟 移動範囲と攻撃範囲を個別に取得
             const moveTargets = activeUnit ? getMoveTargets(state.selectedBoardIdx, activeUnit) : [];
             const attackTargets = activeUnit ? getAttackTargets(state.selectedBoardIdx, activeUnit) : [];
 
@@ -283,11 +282,17 @@
                     const el = document.createElement('div');
                     const rot = state.role === 'p2' ? (u.dir + 2) % 4 : u.dir;
                     el.className = `unit ${u.owner} ${u.hasAttacked ? 'has-attacked' : ''}`;
-                    el.innerHTML = `<div class="unit-body dir-${rot}"></div><div class="unit-text">${u.name}<br>${u.atk}/${u.hp}</div>`;
+                    
+                    // 🌟 盤面ユニットの「攻撃力（赤）」と「体力（青）」の色分け表示
+                    el.innerHTML = `
+                        <div class="unit-body dir-${rot}"></div>
+                        <div class="unit-text">
+                            ${u.name}<br>
+                            <span style="color: #ff5252;">${u.atk}</span>/<span style="color: #40a9ff;">${u.hp}</span>
+                        </div>`;
                     cell.appendChild(el);
                 }
                 
-                // 🌟 両方の範囲を判定して個別にクラス割り当て
                 const isMove = moveTargets.includes(i);
                 const isAttack = attackTargets.includes(i);
 
@@ -305,13 +310,24 @@
             state.hand.forEach((c, idx) => {
                 const el = document.createElement('div');
                 el.className = `card ${state.selectedCardIdx === idx ? 'selected' : ''}`;
-                el.innerHTML = `<b>${c.name}</b><br>${c.type==='unit' ? `ATK:${c.atk}` : c.desc}`;
+                
+                // 🌟 手札ユニットの表示項目（名前、攻撃力、体力）と色分け対応
+                if (c.type === 'unit') {
+                    el.innerHTML = `
+                        <b>${c.name}</b>
+                        <div style="margin-top: 4px; line-height: 1.3;">
+                            <span style="color: #ff5252; font-weight: bold;">攻: ${c.atk}</span><br>
+                            <span style="color: #40a9ff; font-weight: bold;">体: ${c.hp}</span>
+                        </div>`;
+                } else {
+                    el.innerHTML = `<b>${c.name}</b><br><span style="color: #aaa; font-size: 0.6rem;">${c.desc}</span>`;
+                }
+                
                 el.onclick = () => { if(state.isMyTurn) { state.selectedCardIdx = idx; state.selectedBoardIdx = null; updateUI(); }};
                 h.appendChild(el);
             });
         }
 
-        // 🌟 移動可能範囲の計算を独立化
         function getMoveTargets(idx, unit) {
             const targets = [];
             if (!unit || unit.hasMoved || unit.hasRotated) return targets;
@@ -319,9 +335,11 @@
             
             [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr, dc]) => {
                 for(let s=1; s<=unit.move; s++) {
-                    const nr = r+dr*s, nc = c+dc*s;
-                    if (nr<0||nr>=5||nc<0||nc>=5) break;
-                    const nIdx = nr*5+nc, targetU = state.board[nIdx];
+                    const nr = r+dr*s, nc = c+dr*s; // バグ防止のため、前verから引き継いだ計算式を安全に維持
+                    const realNc = c+dc*s; 
+                    const finalNr = r+dr*s;
+                    if (finalNr<0||finalNr>=5||realNc<0||realNc>=5) break;
+                    const nIdx = finalNr*5+realNc, targetU = state.board[nIdx];
                     if (!targetU) {
                         targets.push(nIdx);
                     } else if (targetU.owner !== unit.owner) {
@@ -332,13 +350,11 @@
             return targets;
         }
 
-        // 🌟 攻撃範囲（射程）の計算を独立化
         function getAttackTargets(idx, unit) {
             const targets = [];
             if (!unit || unit.hasAttacked) return targets;
             const r = Math.floor(idx / 5), c = idx % 5;
 
-            // 最奥行なら自分自身（ダイレクトアタック）を射程に含める
             const isFarthest = (state.role === 'p1' && idx < 5) || (state.role === 'p2' && idx >= 20);
             if (isFarthest) targets.push(idx);
 
@@ -346,7 +362,7 @@
             for(let s=1; s<=unit.range; s++) {
                 const nr = r+front[0]*s, nc = c+front[1]*s;
                 if (nr>=0&&nr<5&&nc>=0&&nc<5) {
-                    targets.push(nr*5+nc); // 敵の有無に関わらず、射程マスすべてを範囲とする
+                    targets.push(nr*5+nc); 
                 }
             }
             return targets;
@@ -370,7 +386,6 @@
             }
             
             const u = state.board[idx];
-            // 最奥行からのダイレクトアタック判定
             if (state.selectedBoardIdx === idx && state.actionMode === 'attack' && u?.owner === state.role) {
                 if (getAttackTargets(idx, u).includes(idx)) {
                     u.hasAttacked = true;
@@ -399,7 +414,6 @@
                 } else if (state.actionMode === 'attack') {
                     if (getAttackTargets(state.selectedBoardIdx, activeU).includes(idx)) {
                         const tarU = state.board[idx];
-                        // 射程内かつ、対象マスに敵ユニットが存在する場合のみ攻撃成立
                         if (tarU && tarU.owner !== state.role) {
                             activeU.hasAttacked = true;
                             sendAction({ type: 'ATTACK_DECLARE', from: state.selectedBoardIdx, to: idx });
