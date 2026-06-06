@@ -51,7 +51,36 @@
 
         /* ゲーム画面 */
         #game-screen { display: none; width: 100%; max-width: 400px; flex-direction: column; gap: 10px; }
-        .status-bar { display: flex; justify-content: space-between; background: #2a2a35; padding: 10px; border-radius: 8px; font-size: 0.9rem;}
+        .status-bar { display: flex; justify-content: space-between; background: #2a2a35; padding: 10px; border-radius: 8px; font-size: 0.9rem; transition: background 0.3s, border 0.3s; }
+        
+        /* ターン表示の強調カラー */
+        .status-bar.my-turn { background: #1e3d2f; border: 2px solid #2ecc71; box-sizing: border-box; }
+        .status-bar.opp-turn { background: #3d1e1e; border: 2px solid #e74c3c; box-sizing: border-box; }
+
+        /* 「Your Turn」ポップアップバナー */
+        #your-turn-banner {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            background: rgba(46, 204, 113, 0.95);
+            color: white;
+            padding: 20px 50px;
+            font-size: 2.5rem;
+            font-weight: bold;
+            border-radius: 12px;
+            z-index: 100;
+            transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
+            opacity: 0;
+            pointer-events: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            letter-spacing: 1px;
+        }
+        #your-turn-banner.show {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
         
         /* 盤面 */
         #board {
@@ -101,6 +130,7 @@
             font-size: 0.6rem;
             transition: transform 0.2s;
         }
+        /* 向き（上・右・下・左） */
         .unit.dir-0::after { transform: rotate(0deg); }
         .unit.dir-1::after { transform: rotate(90deg); }
         .unit.dir-2::after { transform: rotate(180deg); }
@@ -127,6 +157,10 @@
 
     <h1>Grid Tactics P2P</h1>
 
+    <!-- 「Your Turn」演出用バナー -->
+    <div id="your-turn-banner">Your Turn</div>
+
+    <!-- 1. 接続用セットアップ画面 -->
     <div id="setup-screen">
         <div class="setup-group">
             <button id="btn-create-room">部屋を作る (ホスト)</button>
@@ -146,14 +180,17 @@
         </div>
     </div>
 
+    <!-- 2. メインゲーム画面 -->
     <div id="game-screen">
         <div class="status-bar">
             <div>あなた: <span id="my-role">-</span> | ライフ: <span id="my-hp">10</span></div>
             <div>相手のライフ: <span id="opp-hp">10</span></div>
         </div>
-        <div class="status-bar" style="background:#1a1a25;">
-            <div>ターン: <span id="current-turn">プレイヤー1</span></div>
-            <div>フェーズ: <span id="current-phase">召喚</span> (<span id="summon-count">0</span>枚召喚済)</div>
+        
+        <!-- 識別しやすくなったターンインジケーター -->
+        <div id="turn-bar" class="status-bar">
+            <div>ターン: <span id="current-turn">-</span></div>
+            <div>フェーズ: <span id="current-phase">召喚</span> (<span id="summon-count">0</span>枚)</div>
         </div>
 
         <div id="board"></div>
@@ -182,7 +219,7 @@
         ];
 
         let state = {
-            role: null, // 'p1' または 'p2'
+            role: null, // 'p1' (Host) または 'p2' (Guest)
             isMyTurn: false,
             turnOwner: 'p1',
             phase: 'summon',
@@ -197,130 +234,147 @@
             actionMode: 'move'
         };
 
-        // --- PeerJS を使った超かんたんP2P接続処理 ---
+        // --- PeerJS P2P 通信処理 ---
         let peer = null;
         let conn = null;
 
-        // ランダムな7文字の部屋IDを生成する関数
         function generateRoomId() {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
             let result = '';
-            for (let i = 0; i < 7; i++) {
-                result += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
+            for (let i = 0; i < 7; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
             return result;
         }
 
-        // ホストとして部屋を作成
         document.getElementById('btn-create-room').addEventListener('click', () => {
             const roomId = generateRoomId();
             state.role = 'p1';
-            
-            // Peerオブジェクトを部屋IDを指定して初期化
             peer = new Peer(roomId);
-            
             peer.on('open', (id) => {
                 document.getElementById('display-room-id').innerText = id;
                 document.getElementById('room-id-area').style.display = 'block';
                 document.getElementById('btn-create-room').disabled = true;
             });
-
-            // ゲストが接続してきたときのイベント
-            peer.on('connection', (connection) => {
-                conn = connection;
-                setupConnection();
-            });
-
-            peer.on('error', (err) => {
-                alert("エラーが発生しました。もう一度部屋を作り直してください。: " + err.type);
-            });
+            peer.on('connection', (connection) => { conn = connection; setupConnection(); });
         });
 
-        // ゲストとして部屋に参加
         document.getElementById('btn-join-room').addEventListener('click', () => {
             const roomId = document.getElementById('input-room-id').value.trim().toUpperCase();
             if (roomId.length !== 7) return alert("7桁の部屋番号を入力してください");
-            
             state.role = 'p2';
-            peer = new Peer(); // ゲストはランダムなIDで初期化
-            
-            peer.on('open', () => {
-                // ホストの部屋IDに接続を仕掛ける
-                conn = peer.connect(roomId);
-                setupConnection();
-            });
+            peer = new Peer();
+            peer.on('open', () => { conn = peer.connect(roomId); setupConnection(); });
         });
 
-        // 接続が確立した後のデータ処理設定
         function setupConnection() {
             conn.on('open', () => {
-                // 画面を切り替えてゲーム開始
                 document.getElementById('setup-screen').style.display = 'none';
                 document.getElementById('game-screen').style.display = 'flex';
                 initGame();
             });
-
-            conn.on('data', (data) => {
-                handleRemoteAction(data);
-            });
+            conn.on('data', (data) => { handleRemoteAction(data); });
         }
 
         function sendAction(action) {
-            if (conn && conn.open) {
-                conn.send(action);
-            }
+            if (conn && conn.open) conn.send(action);
         }
 
-        // --- ゲームロジック (前回の核となるシステムをそのまま継承) ---
+        // --- ゲームロジック ---
         function initGame() {
             addLog("対戦が開始されました！");
-            document.getElementById('my-role').innerText = state.role === 'p1' ? 'プレイヤー1 (先攻)' : 'プレイヤー2 (後攻)';
+            document.getElementById('my-role').innerText = state.role === 'p1' ? 'プレイヤー1' : 'プレイヤー2';
             state.isMyTurn = (state.role === 'p1');
             
             state.hand = [ { ...CARD_DATA[0] }, { ...CARD_DATA[1] }, { ...CARD_DATA[2] }, { ...CARD_DATA[3] } ];
             
             createBoardUI();
             updateUI();
+
+            if (state.isMyTurn) triggerYourTurnBanner();
         }
 
+        // 🌟【改善】視点に応じた盤面の生成
         function createBoardUI() {
             const boardEl = document.getElementById('board');
             boardEl.innerHTML = '';
-            for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+            
+            // v = 画面上の表示位置インデックス (0が左上、15が右下)
+            for (let v = 0; v < GRID_SIZE * GRID_SIZE; v++) {
+                // p1はそのまま、p2(ゲスト)はインデックスを逆順にマッピング(180度反転視点)
+                const i = state.role === 'p1' ? v : 15 - v;
+                
                 const cell = document.createElement('div');
                 cell.className = 'cell';
-                cell.dataset.idx = i;
+                
+                // 陣地の視覚化（データ上のインデックス i に基づいて判定するため、p2でも自分の陣地が手前に来る）
                 if (i >= 12) cell.classList.add('spawn-zone-p1');
                 if (i <= 3) cell.classList.add('spawn-zone-p2');
+
                 cell.addEventListener('click', () => onCellClick(i));
                 boardEl.appendChild(cell);
             }
         }
 
+        // 「Your Turn」の派手なポップアップを表示する関数
+        function triggerYourTurnBanner() {
+            const banner = document.getElementById('your-turn-banner');
+            banner.classList.add('show');
+            setTimeout(() => { banner.classList.remove('show'); }, 1500);
+        }
+
         function updateUI() {
+            // ライフ等の更新
             document.getElementById('my-hp').innerText = state.hp[state.role];
             document.getElementById('opp-hp').innerText = state.hp[state.role === 'p1' ? 'p2' : 'p1'];
-            document.getElementById('current-turn').innerText = state.turnOwner === 'p1' ? 'プレイヤー1' : 'プレイヤー2';
-            document.getElementById('current-phase').innerText = state.phase === 'summon' ? '召喚フェーズ' : 'アクションフェーズ';
+            document.getElementById('current-phase').innerText = state.phase === 'summon' ? '召喚' : 'アクション';
             document.getElementById('summon-count').innerText = state.summonsThisTurn;
 
+            // 🌟【改善】ターン表示の強化（自分か相手かで色とテキストをガラリと変える）
+            const turnBar = document.getElementById('turn-bar');
+            if (state.isMyTurn) {
+                turnBar.className = "status-bar my-turn";
+                document.getElementById('current-turn').innerText = "あなた番 (Your Turn)";
+            } else {
+                turnBar.className = "status-bar opp-turn";
+                document.getElementById('current-turn').innerText = "相手の番 (Opponent Turn)";
+            }
+
+            // ボタン状態
             document.getElementById('btn-mode-move').style.background = state.actionMode === 'move' ? '#2980b9' : '#34495e';
             document.getElementById('btn-mode-attack').style.background = state.actionMode === 'attack' ? '#c0392b' : '#34495e';
 
-            for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
-                const cell = document.getElementById('board').children[i];
+            // 🌟【改善】盤面全体の描画（反転視点の適用）
+            const boardEl = document.getElementById('board');
+            for (let v = 0; v < GRID_SIZE * GRID_SIZE; v++) {
+                const i = state.role === 'p1' ? v : 15 - v; // 表示位置vに対応するデータインデックスi
+                const cell = boardEl.children[v];
                 cell.innerHTML = '';
                 cell.classList.remove('highlight-move', 'highlight-attack');
 
                 const unit = state.board[i];
                 if (unit) {
                     const unitEl = document.createElement('div');
-                    unitEl.className = `unit ${unit.owner} dir-${unit.dir}`;
+                    
+                    // 🌟【改善】p2視点の場合、ユニットの向き(▲)を180度(+2)回転させて「自分から見て前方」を上にする
+                    const displayDir = state.role === 'p2' ? (unit.dir + 2) % 4 : unit.dir;
+                    
+                    unitEl.className = `unit ${unit.owner} dir-${displayDir}`;
                     unitEl.innerHTML = `<div>${unit.name}</div><div>${unit.atk}/${unit.hp}</div>`;
                     cell.appendChild(unitEl);
                 }
+
+                // 🌟【改善】移動・攻撃可能マスのハイライトも反転視点に対応
+                if (state.isMyTurn && state.selectedBoardIdx !== null) {
+                    const activeUnit = state.board[state.selectedBoardIdx];
+                    if (activeUnit && activeUnit.owner === state.role) {
+                        if (getValidTargets(state.selectedBoardIdx, activeUnit).includes(i)) {
+                            const cellClass = state.actionMode === 'move' ? 'highlight-move' : 'highlight-attack';
+                            cell.classList.add(cellClass);
+                        }
+                    }
+                }
             }
 
+            // 手札の描画
             const handEl = document.getElementById('hand');
             handEl.innerHTML = '';
             state.hand.forEach((card, idx) => {
@@ -335,18 +389,9 @@
                 });
                 handEl.appendChild(cardEl);
             });
-
-            if (state.isMyTurn && state.selectedBoardIdx !== null) {
-                const unit = state.board[state.selectedBoardIdx];
-                if (unit && unit.owner === state.role) {
-                    getValidTargets(state.selectedBoardIdx, unit).forEach(idx => {
-                        cellClass = state.actionMode === 'move' ? 'highlight-move' : 'highlight-attack';
-                        document.getElementById('board').children[idx].classList.add(cellClass);
-                    });
-                }
-            }
         }
 
+        // 移動・攻撃の有効マス計算 (内部データ上の絶対座標で計算するためロジックは不変)
         function getValidTargets(idx, unit) {
             const targets = [];
             const r = Math.floor(idx / GRID_SIZE);
@@ -400,9 +445,7 @@
                     addLog(`あなたが ${card.name} を召喚しました。`);
                     sendAction({ type: 'SUMMON', idx, card, dir: newUnit.dir });
 
-                    if (state.summonsThisTurn >= state.maxSummons) {
-                        state.phase = 'action';
-                    }
+                    if (state.summonsThisTurn >= state.maxSummons) state.phase = 'action';
                     updateUI();
                 }
                 return;
@@ -489,6 +532,7 @@
         document.getElementById('btn-mode-move').addEventListener('click', () => { state.actionMode = 'move'; updateUI(); });
         document.getElementById('btn-mode-attack').addEventListener('click', () => { state.actionMode = 'attack'; updateUI(); });
 
+        // --- 同期処理（相手からのデータ受信） ---
         function handleRemoteAction(action) {
             switch(action.type) {
                 case 'SUMMON':
@@ -517,7 +561,11 @@
                     state.summonsThisTurn = 0;
                     state.turnCount++;
                     if (state.turnCount >= 4) state.maxSummons = 2;
+                    
+                    // 🌟【改善】自分のターンになったらバナーを出す
+                    triggerYourTurnBanner();
                     addLog(`あなたのターンです！ (ドロー)`);
+                    
                     state.hand.push({ ...CARD_DATA[Math.floor(Math.random() * CARD_DATA.length)] });
                     break;
             }
