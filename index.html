@@ -69,7 +69,6 @@
         .status-bar.my-turn { background: #1e3d2f; border-color: #2ecc71; }
         .status-bar.opp-turn { background: #3d1e1e; border-color: #e74c3c; }
 
-        /* 🌟 汎用的なターン通知バナー（背景色はJSで動的制御） */
         #turn-banner {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
             color: white; padding: 20px 50px;
@@ -90,8 +89,11 @@
         }
         .cell.spawn-zone-p1 { background: #223322; border: 1px dashed #44aa44; }
         .cell.spawn-zone-p2 { background: #332222; border: 1px dashed #aa4444; }
+        
+        /* 🌟 各種ハイライトカラー */
         .cell.highlight-move { background: #34495e; border: 2px solid #3498db; }
         .cell.highlight-attack { background: #5c2525; border: 2px solid #e74c3c; }
+        .cell.highlight-both { background: #48234e; border: 2px solid #9b59b6; } /* 綺麗な紫色 */
 
         .unit { width: 85%; height: 85%; position: relative; display: flex; align-items: center; justify-content: center; transition: opacity 0.3s; }
         .unit.has-attacked { opacity: 0.4; }
@@ -201,7 +203,6 @@
                 document.getElementById('setup-screen').style.display = 'none';
                 document.getElementById('game-screen').style.display = 'flex';
                 
-                // 🌟 ホスト側で先攻・後攻をランダムに決定してゲストに送信
                 if (state.role === 'p1') {
                     const firstTurn = Math.random() < 0.5 ? 'p1' : 'p2';
                     sendAction({ type: 'START_GAME', firstTurn: firstTurn });
@@ -213,7 +214,6 @@
 
         function sendAction(a) { if (conn?.open) conn.send(a); }
 
-        // 🌟 ランダムに決定した先攻情報を受け取って初期化
         function initGame(firstTurn) {
             state.turnOwner = firstTurn;
             state.isMyTurn = (state.role === firstTurn);
@@ -232,7 +232,6 @@
             }
             updateUI();
             
-            // 🌟 初期ターン通知
             if (state.isMyTurn) {
                 triggerTurnBanner("Your Turn", true);
             } else {
@@ -240,7 +239,6 @@
             }
         }
 
-        // 🌟 Turnバナーの表示をマルチ対応化 (自ターンは緑、敵ターンは赤)
         function triggerTurnBanner(text, isMyTurn) {
             const b = document.getElementById('turn-banner');
             b.innerText = text;
@@ -269,13 +267,16 @@
             document.getElementById('btn-mode-attack').style.background = state.actionMode === 'attack' ? '#c0392b' : '#34495e';
 
             const b = document.getElementById('board');
-            const validTargets = activeUnit ? getValidTargets(state.selectedBoardIdx, activeUnit) : [];
+            
+            // 🌟 移動範囲と攻撃範囲を個別に取得
+            const moveTargets = activeUnit ? getMoveTargets(state.selectedBoardIdx, activeUnit) : [];
+            const attackTargets = activeUnit ? getAttackTargets(state.selectedBoardIdx, activeUnit) : [];
 
             for (let v=0; v<25; v++) {
                 const i = state.role === 'p1' ? v : 24 - v;
                 const cell = b.children[v];
                 cell.innerHTML = '';
-                cell.classList.remove('highlight-move', 'highlight-attack');
+                cell.classList.remove('highlight-move', 'highlight-attack', 'highlight-both');
 
                 const u = state.board[i];
                 if (u) {
@@ -285,7 +286,18 @@
                     el.innerHTML = `<div class="unit-body dir-${rot}"></div><div class="unit-text">${u.name}<br>${u.atk}/${u.hp}</div>`;
                     cell.appendChild(el);
                 }
-                if (validTargets.includes(i)) cell.classList.add(state.actionMode === 'move' ? 'highlight-move' : 'highlight-attack');
+                
+                // 🌟 両方の範囲を判定して個別にクラス割り当て
+                const isMove = moveTargets.includes(i);
+                const isAttack = attackTargets.includes(i);
+
+                if (isMove && isAttack) {
+                    cell.classList.add('highlight-both');
+                } else if (isMove) {
+                    cell.classList.add('highlight-move');
+                } else if (isAttack) {
+                    cell.classList.add('highlight-attack');
+                }
             }
 
             const h = document.getElementById('hand');
@@ -299,40 +311,42 @@
             });
         }
 
-        function getValidTargets(idx, unit) {
+        // 🌟 移動可能範囲の計算を独立化
+        function getMoveTargets(idx, unit) {
             const targets = [];
-            if (!unit) return targets;
+            if (!unit || unit.hasMoved || unit.hasRotated) return targets;
             const r = Math.floor(idx / 5), c = idx % 5;
             
-            if (state.actionMode === 'move') {
-                // 🌟【修正】すでに移動・回転済みのユニットは一切の移動ターゲットを生成しない（重複移動防止ガード）
-                if (unit.hasMoved || unit.hasRotated) return [];
-
-                [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr, dc]) => {
-                    for(let s=1; s<=unit.move; s++) {
-                        const nr = r+dr*s, nc = c+dc*s;
-                        if (nr<0||nr>=5||nc<0||nc>=5) break;
-                        const nIdx = nr*5+nc, targetU = state.board[nIdx];
-                        if (!targetU) {
-                            targets.push(nIdx);
-                        } else if (targetU.owner !== unit.owner) {
-                            break; 
-                        }
+            [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr, dc]) => {
+                for(let s=1; s<=unit.move; s++) {
+                    const nr = r+dr*s, nc = c+dc*s;
+                    if (nr<0||nr>=5||nc<0||nc>=5) break;
+                    const nIdx = nr*5+nc, targetU = state.board[nIdx];
+                    if (!targetU) {
+                        targets.push(nIdx);
+                    } else if (targetU.owner !== unit.owner) {
+                        break; 
                     }
-                });
-            } else {
-                // 🌟【修正】すでに攻撃済みのユニットは一切の攻撃ターゲットを生成しない
-                if (unit.hasAttacked) return [];
+                }
+            });
+            return targets;
+        }
 
-                const isFarthest = (state.role === 'p1' && idx < 5) || (state.role === 'p2' && idx >= 20);
-                if (isFarthest) targets.push(idx);
-                const front = [[-1, 0], [0, 1], [1, 0], [0, -1]][unit.dir];
-                for(let s=1; s<=unit.range; s++) {
-                    const nr = r+front[0]*s, nc = c+front[1]*s;
-                    if (nr>=0&&nr<5&&nc>=0&&nc<5) {
-                        const nIdx = nr*5+nc;
-                        if (state.board[nIdx] && state.board[nIdx].owner !== unit.owner) targets.push(nIdx);
-                    }
+        // 🌟 攻撃範囲（射程）の計算を独立化
+        function getAttackTargets(idx, unit) {
+            const targets = [];
+            if (!unit || unit.hasAttacked) return targets;
+            const r = Math.floor(idx / 5), c = idx % 5;
+
+            // 最奥行なら自分自身（ダイレクトアタック）を射程に含める
+            const isFarthest = (state.role === 'p1' && idx < 5) || (state.role === 'p2' && idx >= 20);
+            if (isFarthest) targets.push(idx);
+
+            const front = [[-1, 0], [0, 1], [1, 0], [0, -1]][unit.dir];
+            for(let s=1; s<=unit.range; s++) {
+                const nr = r+front[0]*s, nc = c+front[1]*s;
+                if (nr>=0&&nr<5&&nc>=0&&nc<5) {
+                    targets.push(nr*5+nc); // 敵の有無に関わらず、射程マスすべてを範囲とする
                 }
             }
             return targets;
@@ -356,8 +370,9 @@
             }
             
             const u = state.board[idx];
+            // 最奥行からのダイレクトアタック判定
             if (state.selectedBoardIdx === idx && state.actionMode === 'attack' && u?.owner === state.role) {
-                if (getValidTargets(idx, u).includes(idx)) {
+                if (getAttackTargets(idx, u).includes(idx)) {
                     u.hasAttacked = true;
                     sendAction({ type: 'ATTACK_DECLARE', from: idx, to: idx });
                     executeAttack(idx, idx);
@@ -372,19 +387,26 @@
                 updateUI();
             } else if (state.selectedBoardIdx !== null) {
                 const activeU = state.board[state.selectedBoardIdx];
-                if (getValidTargets(state.selectedBoardIdx, activeU).includes(idx)) {
-                    if (state.actionMode === 'move') {
+                
+                if (state.actionMode === 'move') {
+                    if (getMoveTargets(state.selectedBoardIdx, activeU).includes(idx)) {
                         activeU.hasMoved = true;
                         state.board[idx] = activeU; state.board[state.selectedBoardIdx] = null;
                         sendAction({ type: 'MOVE', from: state.selectedBoardIdx, to: idx });
                         state.selectedBoardIdx = null;
-                    } else {
-                        activeU.hasAttacked = true;
-                        sendAction({ type: 'ATTACK_DECLARE', from: state.selectedBoardIdx, to: idx });
-                        executeAttack(state.selectedBoardIdx, idx);
-                        state.selectedBoardIdx = null;
+                        updateUI();
                     }
-                    updateUI();
+                } else if (state.actionMode === 'attack') {
+                    if (getAttackTargets(state.selectedBoardIdx, activeU).includes(idx)) {
+                        const tarU = state.board[idx];
+                        // 射程内かつ、対象マスに敵ユニットが存在する場合のみ攻撃成立
+                        if (tarU && tarU.owner !== state.role) {
+                            activeU.hasAttacked = true;
+                            sendAction({ type: 'ATTACK_DECLARE', from: state.selectedBoardIdx, to: idx });
+                            executeAttack(state.selectedBoardIdx, idx);
+                            state.selectedBoardIdx = null;
+                        }
+                    }
                 }
             }
         }
@@ -410,7 +432,7 @@
             if (u && !u.hasMoved && !u.hasRotated) {
                 u.dir = (u.dir + 1) % 4; u.hasRotated = true;
                 sendAction({ type: 'ROTATE', idx: state.selectedBoardIdx, dir: u.dir });
-                state.selectedBoardIdx = null; // 連続操作を防ぐため選択解除
+                state.selectedBoardIdx = null; 
                 updateUI();
             }
         };
@@ -419,7 +441,7 @@
             state.isMyTurn = false;
             state.turnOwner = state.role === 'p1' ? 'p2' : 'p1';
             sendAction({ type: 'END_TURN' });
-            triggerTurnBanner("Enemy Turn", false); // 🌟 敵ターン表示
+            triggerTurnBanner("Enemy Turn", false); 
             updateUI();
         };
 
@@ -427,7 +449,6 @@
         document.getElementById('btn-mode-attack').onclick = () => { state.actionMode = 'attack'; updateUI(); };
 
         function handleRemoteAction(a) {
-            // 🌟 ゲーム開始同期用
             if (a.type === 'START_GAME') {
                 initGame(a.firstTurn);
                 return;
@@ -443,7 +464,7 @@
                 state.summonsThisTurn = 0;
                 state.board.forEach(u => { if(u && u.owner === state.role) { u.hasMoved=false; u.hasRotated=false; u.hasAttacked=false; }});
                 state.hand.push({...CARD_DATA[Math.floor(Math.random()*4)]});
-                triggerTurnBanner("Your Turn", true); // 🌟 自ターン表示
+                triggerTurnBanner("Your Turn", true); 
             }
             updateUI();
         }
