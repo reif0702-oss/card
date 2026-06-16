@@ -1,3 +1,13 @@
+良かったです！スワイプ操作が快適になった一方で、新たな抜け道が生まれてしまっていましたね。ご指摘の2点、完璧に修正しました。
+### 修正内容の解説
+ 1. **斜め移動（ジグザグ移動）ができてしまう問題の修正**
+   * **原因:** スワイプ移動を「隣のマスなら移動OK」という判定にした結果、スカウトなど移動力が2以上あるユニットが「上→右」のように曲がって進むことができてしまい、結果的に斜めに移動できる状態になっていました。
+   * **対策:** ユニットをタッチした瞬間に**「本来進める直線のルート」を事前に計算・確定**させ、スワイプ中はそのルート上（または元の位置）にしか指が反応しないように厳格化しました。これにより、以前と同じく直線方向にしか進めなくなります。
+ 2. **コマンドの表示/非表示（スマートUI化）**
+   * **対策:** 「Attack」と「Spin」ボタンを普段は非表示（消去）にし、**自分のユニットをタッチした時だけフワッと出現する**ように変更しました。何も選択していない時は「Turn End」ボタンが大きく表示されるため、押し間違いが減り、スマホゲームとしてかなり洗練された見た目になります。
+これらを反映した最新のコードです。そのまま上書きしてプレイしてみてください！
+### 修正完了：斜め移動防止＆スマートコマンド版 index.html
+```html
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -11,14 +21,12 @@
             --cell-size: 65px;
         }
         
-        /* 画面全体の謎の文字選択と長押しメニューを完全に無効化 */
         * {
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;
         }
         
-        /* 入力欄と、コピーさせたい部屋番号だけは文字選択を許可 */
         input, .selectable {
             -webkit-touch-callout: default;
             -webkit-user-select: auto;
@@ -34,7 +42,6 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            /* ここにあった touch-action: none; を削除し、画面スクロールを復活 */
         }
         
         #setup-screen {
@@ -93,7 +100,6 @@
             display: grid; grid-template-columns: repeat(var(--grid-size), var(--cell-size));
             grid-template-rows: repeat(var(--grid-size), var(--cell-size));
             gap: 4px; background: #111; padding: 4px; border-radius: 8px; margin: 0 auto;
-            /* 盤面の上をスワイプした時だけはスクロールさせず、ユニット移動に集中させる */
             touch-action: none; 
         }
         .cell {
@@ -135,7 +141,11 @@
         .card { width: 78px; background: #2a2a35; border: 2px solid #555; border-radius: 6px; padding: 5px 3px; font-size: 0.7rem; text-align: center; cursor: pointer; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
         .card.selected { border-color: #f1c40f; background: #3a3a4c; }
         
-        #controls { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 6px; }
+        /* コントロール周りをスマートUIに改修 */
+        #controls { display: flex; gap: 6px; height: 45px; }
+        #controls button { flex: 1; margin: 0; }
+        .hidden-cmd { display: none !important; }
+
         #log { background: #111; height: 60px; overflow-y: auto; font-size: 0.75rem; padding: 5px; border-radius: 4px; color: #aaa; }
 
         #game-over-screen {
@@ -180,8 +190,9 @@
         <div id="my-hp" class="hp-display-box my-hp-color">10</div>
         
         <div id="controls">
-            <button id="btn-mode-attack" style="background:#34495e;">Attack</button>
-            <button id="btn-rotate" style="background:#f39c12;">Spin</button>
+            <button id="btn-mode-attack" class="hidden-cmd" style="background:#34495e;">Attack</button>
+            <button id="btn-rotate" class="hidden-cmd" style="background:#f39c12;">Spin</button>
+            
             <button id="btn-end-turn" style="background:#e67e22;">Turn End</button>
         </div>
         <div id="hand"></div>
@@ -202,6 +213,7 @@
             hp: { p1: 10, p2: 10 }, board: Array(25).fill(null), hand: [],
             selectedCardIdx: null, selectedBoardIdx: null, 
             dragStartIdx: null, originalMoveStartIdx: null, currentDragIdx: null, tempMovedCount: 0,
+            validMoveTargets: [], // 🌟 スワイプ時に許可する「直線ルート」を保存する配列
             actionMode: 'move'
         };
 
@@ -276,6 +288,8 @@
                         state.originalMoveStartIdx = idx;
                         state.currentDragIdx = idx;
                         state.tempMovedCount = u.movedCount || 0;
+                        // 🌟 タッチした瞬間に「本来進める直線ルート」だけを計算して保存
+                        state.validMoveTargets = getMoveTargets(idx, u);
                     }
                     updateUI();
                 }
@@ -296,12 +310,15 @@
                 const movingUnit = state.board[fromIdx];
                 if (!movingUnit || movingUnit.owner !== state.role) return;
 
-                const r1 = Math.floor(fromIdx / 5), c1 = fromIdx % 5;
-                const r2 = Math.floor(idx / 5), c2 = idx % 5;
-                const isAdjacent = Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1;
-
-                if (isAdjacent && !state.board[idx] && state.tempMovedCount < movingUnit.move) {
-                    state.tempMovedCount++;
+                // 🌟 保存された「直線ルートの中」か「元の場所に戻る」時だけ移動を許可（斜め・ジグザグ移動をブロック）
+                if (state.validMoveTargets.includes(idx) || idx === state.originalMoveStartIdx) {
+                    const startR = Math.floor(state.originalMoveStartIdx / 5);
+                    const startC = state.originalMoveStartIdx % 5;
+                    const r2 = Math.floor(idx / 5);
+                    const c2 = idx % 5;
+                    const dist = Math.abs(r2 - startR) + Math.abs(c2 - startC);
+                    
+                    state.tempMovedCount = (movingUnit.movedCount || 0) + dist;
                     state.board[idx] = movingUnit;
                     state.board[fromIdx] = null;
                     state.currentDragIdx = idx;
@@ -328,6 +345,7 @@
                     state.dragStartIdx = null;
                     state.originalMoveStartIdx = null;
                     state.currentDragIdx = null;
+                    state.validMoveTargets = [];
                     updateUI();
                 }
             });
@@ -367,11 +385,24 @@
             const activeUnit = state.selectedBoardIdx !== null ? state.board[state.selectedBoardIdx] : null;
             const canControl = state.isMyTurn && activeUnit && activeUnit.owner === state.role;
             
-            document.getElementById('btn-mode-attack').disabled = state.isGameOver || !canControl || activeUnit.hasAttacked || state.phase !== 'action';
-            document.getElementById('btn-rotate').disabled = state.isGameOver || !canControl || (activeUnit.movedCount > 0) || activeUnit.hasRotated || state.phase !== 'action';
+            // 🌟 ユニットを選択している時だけ「Attack」「Spin」を表示する
+            const showCmds = canControl && state.phase === 'action';
+            const btnAttack = document.getElementById('btn-mode-attack');
+            const btnRotate = document.getElementById('btn-rotate');
+
+            if (showCmds) {
+                btnAttack.classList.remove('hidden-cmd');
+                btnRotate.classList.remove('hidden-cmd');
+            } else {
+                btnAttack.classList.add('hidden-cmd');
+                btnRotate.classList.add('hidden-cmd');
+            }
+
+            btnAttack.disabled = state.isGameOver || !canControl || activeUnit.hasAttacked || state.phase !== 'action';
+            btnRotate.disabled = state.isGameOver || !canControl || (activeUnit.movedCount > 0) || activeUnit.hasRotated || state.phase !== 'action';
             document.getElementById('btn-end-turn').disabled = state.isGameOver || !state.isMyTurn;
 
-            document.getElementById('btn-mode-attack').style.background = state.actionMode === 'attack' ? '#c0392b' : '#34495e';
+            btnAttack.style.background = state.actionMode === 'attack' ? '#c0392b' : '#34495e';
 
             const b = document.getElementById('board');
             const currentMoveIdx = state.dragStartIdx !== null ? state.currentDragIdx : state.selectedBoardIdx;
@@ -541,6 +572,11 @@
             state.turnOwner = nextOwner;
             if (nextOwner === state.firstTurn) state.turnCount++;
             sendAction({ type: 'END_TURN', nextTurnCount: state.turnCount });
+            
+            // ターン終了時に選択状態を解除してボタンを隠す
+            state.selectedBoardIdx = null;
+            state.actionMode = 'move';
+            
             triggerTurnBanner("Enemy Turn", false); 
             updateUI();
         };
@@ -582,3 +618,5 @@
     </script>
 </body>
 </html>
+
+```
