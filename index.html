@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
@@ -95,6 +95,7 @@
         .cell {
             background: #333; border-radius: 4px; position: relative;
             display: flex; align-items: center; justify-content: center; cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
         }
         .cell.spawn-zone-p1 { background: #223322; border: 1px dashed #44aa44; }
         .cell.spawn-zone-p2 { background: #332222; border: 1px dashed #aa4444; }
@@ -102,6 +103,10 @@
         .cell.highlight-move { background: #34495e; border: 2px solid #3498db; }
         .cell.highlight-attack { background: #5c2525; border: 2px solid #e74c3c; }
         .cell.highlight-both { background: #48234e; border: 2px solid #9b59b6; } 
+
+        /* スワイプ召喚時のハイライト用CSS */
+        .active-summon-zone { box-shadow: inset 0 0 15px rgba(241, 196, 15, 0.4); }
+        .hovered-spawn { background: #f1c40f !important; border: 2px dashed #fff !important; transform: scale(1.05); z-index: 10; }
 
         .unit { width: 85%; height: 85%; position: relative; display: flex; align-items: center; justify-content: center; transition: opacity 0.3s; pointer-events: none; }
         .unit.has-attacked { opacity: 0.4; }
@@ -117,9 +122,7 @@
         .unit-text {
             position: relative; z-index: 2; color: white; font-size: 0.65rem; font-weight: bold; text-align: center;
             text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
-            pointer-events: none; margin-top: 8px;
-            line-height: 1.2;
-            white-space: nowrap;
+            pointer-events: none; margin-top: 8px; line-height: 1.2; white-space: nowrap;
         }
 
         .dir-0 { transform: rotate(0deg); }   
@@ -127,11 +130,13 @@
         .dir-2 { transform: rotate(180deg); } 
         .dir-3 { transform: rotate(270deg); } 
 
-        #hand { display: flex; gap: 6px; justify-content: center; margin-top: 5px; min-height: 95px;}
-        .card { width: 78px; background: #2a2a35; border: 2px solid #555; border-radius: 6px; padding: 5px 3px; font-size: 0.7rem; text-align: center; cursor: pointer; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
+        #hand { display: flex; gap: 6px; justify-content: center; margin-top: 5px; min-height: 95px; touch-action: none; }
+        .card { width: 78px; background: #2a2a35; border: 2px solid #555; border-radius: 6px; padding: 5px 3px; font-size: 0.7rem; text-align: center; cursor: pointer; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; touch-action: none; }
         .card.selected { border-color: #f1c40f; background: #3a3a4c; }
-        
-        /* コントロール周りをスマートUIに改修 */
+
+        /* スワイプ中のカードの見た目 */
+        .card-ghost { position: fixed; pointer-events: none; z-index: 9999; opacity: 0.85; box-shadow: 0 10px 20px rgba(0,0,0,0.5); transform: scale(1.05); }
+
         #controls { display: flex; gap: 6px; height: 45px; }
         #controls button { flex: 1; margin: 0; }
         .hidden-cmd { display: none !important; }
@@ -182,7 +187,6 @@
         <div id="controls">
             <button id="btn-mode-attack" class="hidden-cmd" style="background:#34495e;">Attack</button>
             <button id="btn-rotate" class="hidden-cmd" style="background:#f39c12;">Spin</button>
-            
             <button id="btn-end-turn" style="background:#e67e22;">Turn End</button>
         </div>
         <div id="hand"></div>
@@ -203,11 +207,12 @@
             hp: { p1: 10, p2: 10 }, board: Array(25).fill(null), hand: [],
             selectedCardIdx: null, selectedBoardIdx: null, 
             dragStartIdx: null, originalMoveStartIdx: null, currentDragIdx: null, tempMovedCount: 0,
-            validMoveTargets: [], // 🌟 スワイプ時に許可する「直線ルート」を保存する配列
+            validMoveTargets: [], 
             actionMode: 'move'
         };
 
         let peer = null, conn = null;
+        let dragGhost = null; // スワイプ中のカード要素を保持
 
         function generateRoomId() { return Math.random().toString(36).substring(2, 9).toUpperCase(); }
 
@@ -263,31 +268,60 @@
                 b.appendChild(c);
             }
             
-            b.addEventListener('pointerdown', (e) => {
-                const cell = e.target.closest('.cell');
-                if (!cell || !state.isMyTurn || state.isGameOver || state.phase !== 'action') return;
-                const idx = parseInt(cell.dataset.idx);
-                
-                const u = state.board[idx];
-                if (u && u.owner === state.role) {
-                    state.selectedBoardIdx = idx;
-                    state.selectedCardIdx = null;
-                    
-                    if (state.actionMode !== 'attack' && !u.hasRotated && !u.hasMoved) {
-                        state.dragStartIdx = idx;
-                        state.originalMoveStartIdx = idx;
-                        state.currentDragIdx = idx;
-                        state.tempMovedCount = u.movedCount || 0;
-                        // 🌟 タッチした瞬間に「本来進める直線ルート」だけを計算して保存
-                        state.validMoveTargets = getMoveTargets(idx, u);
-                    }
-                    updateUI();
-                }
-            });
+            updateUI();
+            triggerTurnBanner(state.isMyTurn ? "Your Turn" : "Enemy Turn", state.isMyTurn);
+        }
 
-            b.addEventListener('pointermove', (e) => {
-                if (state.dragStartIdx === null) return;
+        // ==========================================
+        // グローバルなドラッグ＆ドロップイベントの処理
+        // ==========================================
+        
+        // 盤面のユニットタッチ開始（移動の起点）
+        document.getElementById('board').addEventListener('pointerdown', (e) => {
+            const cell = e.target.closest('.cell');
+            if (!cell || !state.isMyTurn || state.isGameOver || state.phase !== 'action') return;
+            const idx = parseInt(cell.dataset.idx);
+            
+            const u = state.board[idx];
+            if (u && u.owner === state.role) {
+                state.selectedBoardIdx = idx;
+                state.selectedCardIdx = null;
                 
+                if (state.actionMode !== 'attack' && !u.hasRotated && !u.hasMoved) {
+                    state.dragStartIdx = idx;
+                    state.originalMoveStartIdx = idx;
+                    state.currentDragIdx = idx;
+                    state.tempMovedCount = 0;
+                    state.validMoveTargets = getMoveTargets(idx, u);
+                }
+                updateUI();
+            }
+        });
+
+        // 画面全体でのスワイプ（カード召喚＆ユニット移動）
+        document.addEventListener('pointermove', (e) => {
+            // 1. 手札カードのスワイプ処理
+            if (dragGhost) {
+                dragGhost.style.left = (e.clientX - dragGhost.offsetWidth / 2) + 'px';
+                dragGhost.style.top = (e.clientY - dragGhost.offsetHeight / 2) + 'px';
+
+                document.querySelectorAll('.cell').forEach(c => c.classList.remove('hovered-spawn'));
+                const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+                if (targetEl) {
+                    const cell = targetEl.closest('.cell');
+                    if (cell) {
+                        const cIdx = parseInt(cell.dataset.idx);
+                        const isZone = (state.role === 'p1' && cIdx >= 20) || (state.role === 'p2' && cIdx <= 4);
+                        if (isZone && !state.board[cIdx]) {
+                            cell.classList.add('hovered-spawn');
+                        }
+                    }
+                }
+                return;
+            }
+
+            // 2. 盤面ユニットの移動スワイプ処理
+            if (state.dragStartIdx !== null) {
                 const targetEl = document.elementFromPoint(e.clientX, e.clientY);
                 if (!targetEl) return;
                 const cell = targetEl.closest('.cell');
@@ -300,7 +334,6 @@
                 const movingUnit = state.board[fromIdx];
                 if (!movingUnit || movingUnit.owner !== state.role) return;
 
-                // 🌟 保存された「直線ルートの中」か「元の場所に戻る」時だけ移動を許可（斜め・ジグザグ移動をブロック）
                 if (state.validMoveTargets.includes(idx) || idx === state.originalMoveStartIdx) {
                     const startR = Math.floor(state.originalMoveStartIdx / 5);
                     const startC = state.originalMoveStartIdx % 5;
@@ -308,41 +341,70 @@
                     const c2 = idx % 5;
                     const dist = Math.abs(r2 - startR) + Math.abs(c2 - startC);
                     
-                    state.tempMovedCount = (movingUnit.movedCount || 0) + dist;
+                    state.tempMovedCount = dist;
                     state.board[idx] = movingUnit;
                     state.board[fromIdx] = null;
                     state.currentDragIdx = idx;
                     state.selectedBoardIdx = idx; 
                     updateUI();
                 }
-            });
+            }
+        });
 
-            window.addEventListener('pointerup', () => {
-                if (state.dragStartIdx !== null) {
-                    const u = state.board[state.currentDragIdx];
-                    if (u && state.originalMoveStartIdx !== state.currentDragIdx) {
-                        u.movedCount = state.tempMovedCount;
-                        if (u.movedCount >= u.move) u.hasMoved = true;
-                        
-                        sendAction({ 
-                            type: 'MOVE', 
-                            from: state.originalMoveStartIdx, 
-                            to: state.currentDragIdx,
-                            movedCount: u.movedCount,
-                            hasMoved: u.hasMoved
-                        });
+        // 画面から指を離した時の処理（召喚確定＆移動確定）
+        document.addEventListener('pointerup', (e) => {
+            // 1. 手札カードのドロップ処理
+            if (dragGhost) {
+                dragGhost.remove();
+                dragGhost = null;
+
+                const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+                if (targetEl && state.selectedCardIdx !== null) {
+                    const cell = targetEl.closest('.cell');
+                    if (cell) {
+                        const cIdx = parseInt(cell.dataset.idx);
+                        const isZone = (state.role === 'p1' && cIdx >= 20) || (state.role === 'p2' && cIdx <= 4);
+                        // 自陣の空きマスなら召喚実行
+                        if (isZone && !state.board[cIdx]) {
+                            const c = state.hand[state.selectedCardIdx];
+                            state.board[cIdx] = { ...c, owner: state.role, dir: state.role==='p1'?0:2, movedCount:0, hasMoved:false, hasRotated:false, hasAttacked:false };
+                            state.hand.splice(state.selectedCardIdx, 1);
+                            state.summonsThisTurn++;
+                            sendAction({ type: 'SUMMON', idx: cIdx, card: c, dir: state.board[cIdx].dir });
+                            if (state.summonsThisTurn >= state.maxSummons) state.phase = 'action';
+                        }
                     }
-                    state.dragStartIdx = null;
-                    state.originalMoveStartIdx = null;
-                    state.currentDragIdx = null;
-                    state.validMoveTargets = [];
-                    updateUI();
                 }
-            });
-            
-            updateUI();
-            triggerTurnBanner(state.isMyTurn ? "Your Turn" : "Enemy Turn", state.isMyTurn);
-        }
+                state.selectedCardIdx = null; 
+                document.querySelectorAll('.cell').forEach(c => c.classList.remove('hovered-spawn'));
+                updateUI();
+                return;
+            }
+
+            // 2. 盤面ユニットのドロップ（移動確定）処理
+            if (state.dragStartIdx !== null) {
+                const u = state.board[state.currentDragIdx];
+                if (u && state.originalMoveStartIdx !== state.currentDragIdx) {
+                    u.movedCount = state.tempMovedCount;
+                    // 🌟 一度でも移動したら、残りの移動力に関わらず行動終了とし斜め移動を封じる
+                    u.hasMoved = true; 
+                    sendAction({ 
+                        type: 'MOVE', 
+                        from: state.originalMoveStartIdx, 
+                        to: state.currentDragIdx,
+                        movedCount: u.movedCount,
+                        hasMoved: u.hasMoved
+                    });
+                }
+                state.dragStartIdx = null;
+                state.originalMoveStartIdx = null;
+                state.currentDragIdx = null;
+                state.validMoveTargets = [];
+                updateUI();
+            }
+        });
+
+        // ==========================================
 
         function triggerTurnBanner(text, isMyTurn) {
             const b = document.getElementById('turn-banner');
@@ -375,7 +437,6 @@
             const activeUnit = state.selectedBoardIdx !== null ? state.board[state.selectedBoardIdx] : null;
             const canControl = state.isMyTurn && activeUnit && activeUnit.owner === state.role;
             
-            // 🌟 ユニットを選択している時だけ「Attack」「Spin」を表示する
             const showCmds = canControl && state.phase === 'action';
             const btnAttack = document.getElementById('btn-mode-attack');
             const btnRotate = document.getElementById('btn-rotate');
@@ -399,11 +460,14 @@
             const moveTargets = activeUnit ? getMoveTargets(currentMoveIdx, activeUnit) : [];
             const attackTargets = activeUnit ? getAttackTargets(state.selectedBoardIdx, activeUnit) : [];
 
+            // スワイプ召喚中のハイライト判定
+            const isSummoning = state.phase === 'summon' && state.selectedCardIdx !== null;
+
             for (let v=0; v<25; v++) {
                 const i = state.role === 'p1' ? v : 24 - v;
                 const cell = b.children[v];
                 cell.innerHTML = '';
-                cell.classList.remove('highlight-move', 'highlight-attack', 'highlight-both');
+                cell.classList.remove('highlight-move', 'highlight-attack', 'highlight-both', 'active-summon-zone');
 
                 const u = state.board[i];
                 if (u) {
@@ -419,6 +483,12 @@
                     cell.appendChild(el);
                 }
                 
+                // 召喚可能なマスの強調
+                if (isSummoning) {
+                    const isZone = (state.role === 'p1' && i >= 20) || (state.role === 'p2' && i <= 4);
+                    if (isZone && !state.board[i]) cell.classList.add('active-summon-zone');
+                }
+
                 const isMove = state.actionMode === 'move' && moveTargets.includes(i);
                 const isAttack = state.actionMode === 'attack' && attackTargets.includes(i);
 
@@ -445,7 +515,25 @@
                 } else {
                     el.innerHTML = `<b style="font-size:0.75rem; white-space:nowrap;">${c.name}</b><br><span style="color: #aaa; font-size: 0.6rem;">${c.desc}</span>`;
                 }
-                el.onclick = () => { if(state.isMyTurn && !state.isGameOver) { state.selectedCardIdx = idx; state.selectedBoardIdx = null; state.actionMode = 'move'; updateUI(); }};
+                
+                // カードの「長押し・スワイプ開始」イベント
+                el.onpointerdown = (e) => {
+                    if(!state.isMyTurn || state.isGameOver || state.phase !== 'summon') return;
+                    state.selectedCardIdx = idx;
+
+                    // ドラッグ用のゴースト要素を作成
+                    const rect = el.getBoundingClientRect();
+                    dragGhost = el.cloneNode(true);
+                    dragGhost.classList.add('card-ghost');
+                    dragGhost.style.width = rect.width + 'px';
+                    dragGhost.style.height = rect.height + 'px';
+                    dragGhost.style.left = (e.clientX - rect.width / 2) + 'px';
+                    dragGhost.style.top = (e.clientY - rect.height / 2) + 'px';
+                    document.body.appendChild(dragGhost);
+                    
+                    updateUI(); // 召喚ゾーンを光らせる
+                };
+
                 h.appendChild(el);
             });
         }
@@ -487,21 +575,6 @@
 
         function onCellClick(idx) {
             if (!state.isMyTurn || state.isGameOver) return;
-            
-            if (state.selectedCardIdx !== null && state.phase === 'summon') {
-                const isZone = (state.role === 'p1' && idx >= 20) || (state.role === 'p2' && idx <= 4);
-                if (isZone && !state.board[idx]) {
-                    const c = state.hand[state.selectedCardIdx];
-                    state.board[idx] = { ...c, owner: state.role, dir: state.role==='p1'?0:2, movedCount:0, hasMoved:false, hasRotated:false, hasAttacked:false };
-                    state.hand.splice(state.selectedCardIdx, 1);
-                    state.summonsThisTurn++;
-                    state.selectedCardIdx = null;
-                    sendAction({ type: 'SUMMON', idx, card: c, dir: state.board[idx].dir });
-                    if (state.summonsThisTurn >= state.maxSummons) state.phase = 'action';
-                    updateUI();
-                }
-                return;
-            }
             
             if (state.actionMode === 'attack' && state.selectedBoardIdx !== null) {
                 const activeU = state.board[state.selectedBoardIdx];
@@ -563,7 +636,6 @@
             if (nextOwner === state.firstTurn) state.turnCount++;
             sendAction({ type: 'END_TURN', nextTurnCount: state.turnCount });
             
-            // ターン終了時に選択状態を解除してボタンを隠す
             state.selectedBoardIdx = null;
             state.actionMode = 'move';
             
