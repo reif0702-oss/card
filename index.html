@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
@@ -104,7 +104,6 @@
         .cell.highlight-attack { background: #5c2525; border: 2px solid #e74c3c; }
         .cell.highlight-both { background: #48234e; border: 2px solid #9b59b6; } 
 
-        /* スワイプ召喚時のハイライト用CSS */
         .active-summon-zone { box-shadow: inset 0 0 15px rgba(241, 196, 15, 0.4); }
         .hovered-spawn { background: #f1c40f !important; border: 2px dashed #fff !important; transform: scale(1.05); z-index: 10; }
 
@@ -130,11 +129,33 @@
         .dir-2 { transform: rotate(180deg); } 
         .dir-3 { transform: rotate(270deg); } 
 
-        #hand { display: flex; gap: 6px; justify-content: center; margin-top: 5px; min-height: 95px; touch-action: none; }
+        /* ユニット詳細情報パネルのスタイル */
+        #info-box {
+            width: 100%;
+            background: #2a2a35;
+            border: 2px solid #555;
+            border-radius: 8px;
+            padding: 8px;
+            min-height: 52px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        .info-stats {
+            display: flex;
+            gap: 12px;
+            margin-top: 6px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .info-stat { padding: 3px 6px; border-radius: 4px; background: rgba(0,0,0,0.4); }
+
+        #hand { display: flex; gap: 6px; justify-content: center; min-height: 95px; touch-action: none; }
         .card { width: 78px; background: #2a2a35; border: 2px solid #555; border-radius: 6px; padding: 5px 3px; font-size: 0.7rem; text-align: center; cursor: pointer; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; touch-action: none; }
         .card.selected { border-color: #f1c40f; background: #3a3a4c; }
-
-        /* スワイプ中のカードの見た目 */
         .card-ghost { position: fixed; pointer-events: none; z-index: 9999; opacity: 0.85; box-shadow: 0 10px 20px rgba(0,0,0,0.5); transform: scale(1.05); }
 
         #controls { display: flex; gap: 6px; height: 45px; }
@@ -181,9 +202,15 @@
             <div>ターン: <span id="current-turn">-</span></div>
             <div>フェーズ: <span id="current-phase">召喚</span></div>
         </div>
+        
         <div id="board"></div>
+        
         <div id="my-hp" class="hp-display-box my-hp-color">10</div>
         
+        <div id="info-box">
+            <div style="color:#888; font-size:0.85rem;">ユニット・カードをタップして詳細を確認</div>
+        </div>
+
         <div id="controls">
             <button id="btn-mode-attack" class="hidden-cmd" style="background:#34495e;">Attack</button>
             <button id="btn-rotate" class="hidden-cmd" style="background:#f39c12;">Spin</button>
@@ -212,7 +239,7 @@
         };
 
         let peer = null, conn = null;
-        let dragGhost = null; // スワイプ中のカード要素を保持
+        let dragGhost = null;
 
         function generateRoomId() { return Math.random().toString(36).substring(2, 9).toUpperCase(); }
 
@@ -273,20 +300,37 @@
         }
 
         // ==========================================
-        // グローバルなドラッグ＆ドロップイベントの処理
+        // グローバルなドラッグ＆ドロップ・タッチイベント処理
         // ==========================================
         
-        // 盤面のユニットタッチ開始（移動の起点）
         document.getElementById('board').addEventListener('pointerdown', (e) => {
             const cell = e.target.closest('.cell');
-            if (!cell || !state.isMyTurn || state.isGameOver || state.phase !== 'action') return;
+            if (!cell) return;
             const idx = parseInt(cell.dataset.idx);
             
+            // 攻撃モード中で、未行動の味方を選択している場合はターゲット選択を優先（ここでは選択を切り替えない）
+            if (state.actionMode === 'attack' && state.selectedBoardIdx !== null) {
+                const activeU = state.board[state.selectedBoardIdx];
+                if (activeU && activeU.owner === state.role && !activeU.hasAttacked) {
+                    return; 
+                }
+            }
+
             const u = state.board[idx];
-            if (u && u.owner === state.role) {
+            
+            // パネル表示用の選択（敵味方問わず選択可能）
+            if (u) {
                 state.selectedBoardIdx = idx;
-                state.selectedCardIdx = null;
-                
+                state.selectedCardIdx = null; // 手札の選択を解除
+            } else {
+                state.selectedBoardIdx = null; // 空きマスなら選択解除
+            }
+            updateUI(); // タップした瞬間にパネルを更新
+
+            // 自分のターンのアクションフェーズなら、ドラッグ移動の準備をする
+            if (!state.isMyTurn || state.isGameOver || state.phase !== 'action') return;
+            
+            if (u && u.owner === state.role) {
                 if (state.actionMode !== 'attack' && !u.hasRotated && !u.hasMoved) {
                     state.dragStartIdx = idx;
                     state.originalMoveStartIdx = idx;
@@ -294,11 +338,9 @@
                     state.tempMovedCount = 0;
                     state.validMoveTargets = getMoveTargets(idx, u);
                 }
-                updateUI();
             }
         });
 
-        // 画面全体でのスワイプ（カード召喚＆ユニット移動）
         document.addEventListener('pointermove', (e) => {
             // 1. 手札カードのスワイプ処理
             if (dragGhost) {
@@ -334,6 +376,7 @@
                 const movingUnit = state.board[fromIdx];
                 if (!movingUnit || movingUnit.owner !== state.role) return;
 
+                // 最初に計算した「正しい移動先」または「元の場所」にだけ移動可能
                 if (state.validMoveTargets.includes(idx) || idx === state.originalMoveStartIdx) {
                     const startR = Math.floor(state.originalMoveStartIdx / 5);
                     const startC = state.originalMoveStartIdx % 5;
@@ -351,7 +394,6 @@
             }
         });
 
-        // 画面から指を離した時の処理（召喚確定＆移動確定）
         document.addEventListener('pointerup', (e) => {
             // 1. 手札カードのドロップ処理
             if (dragGhost) {
@@ -364,7 +406,6 @@
                     if (cell) {
                         const cIdx = parseInt(cell.dataset.idx);
                         const isZone = (state.role === 'p1' && cIdx >= 20) || (state.role === 'p2' && cIdx <= 4);
-                        // 自陣の空きマスなら召喚実行
                         if (isZone && !state.board[cIdx]) {
                             const c = state.hand[state.selectedCardIdx];
                             state.board[cIdx] = { ...c, owner: state.role, dir: state.role==='p1'?0:2, movedCount:0, hasMoved:false, hasRotated:false, hasAttacked:false };
@@ -386,7 +427,6 @@
                 const u = state.board[state.currentDragIdx];
                 if (u && state.originalMoveStartIdx !== state.currentDragIdx) {
                     u.movedCount = state.tempMovedCount;
-                    // 🌟 一度でも移動したら、残りの移動力に関わらず行動終了とし斜め移動を封じる
                     u.hasMoved = true; 
                     sendAction({ 
                         type: 'MOVE', 
@@ -434,6 +474,40 @@
             document.getElementById('current-turn').innerText = `${state.turnCount} (${state.isMyTurn ? "あなたの番" : "相手の番"})`;
             document.getElementById('current-phase').innerText = state.phase === 'summon' ? '召喚' : 'アクション';
 
+            // 情報パネルの更新
+            const infoBox = document.getElementById('info-box');
+            let infoData = null;
+            if (state.selectedCardIdx !== null && state.hand[state.selectedCardIdx]) {
+                infoData = state.hand[state.selectedCardIdx];
+                infoBox.style.borderColor = '#f1c40f';
+            } else if (state.selectedBoardIdx !== null && state.board[state.selectedBoardIdx]) {
+                infoData = state.board[state.selectedBoardIdx];
+                infoBox.style.borderColor = infoData.owner === state.role ? '#2ecc71' : '#e74c3c';
+            } else {
+                infoBox.style.borderColor = '#555';
+            }
+
+            if (infoData) {
+                if (infoData.type === 'unit') {
+                    infoBox.innerHTML = `
+                        <div style="color:#fff; font-weight:bold; letter-spacing:1px; font-size:1rem;">${infoData.name}</div>
+                        <div class="info-stats">
+                            <span class="info-stat" style="color:#ffeb3b;">⚔️ 攻:${infoData.atk}</span>
+                            <span class="info-stat" style="color:#00e5ff;">🛡️ 防:${infoData.hp}</span>
+                            <span class="info-stat" style="color:#3498db;">👟 移:${infoData.move}</span>
+                            <span class="info-stat" style="color:#e74c3c;">🎯 射:${infoData.range}</span>
+                        </div>
+                    `;
+                } else {
+                    infoBox.innerHTML = `
+                        <div style="color:#fff; font-weight:bold; letter-spacing:1px; font-size:1rem;">${infoData.name}</div>
+                        <div style="color:#aaa; font-size:0.85rem; margin-top:5px;">${infoData.desc}</div>
+                    `;
+                }
+            } else {
+                infoBox.innerHTML = '<div style="color:#888; font-size:0.85rem;">ユニット・カードをタップして詳細を確認</div>';
+            }
+
             const activeUnit = state.selectedBoardIdx !== null ? state.board[state.selectedBoardIdx] : null;
             const canControl = state.isMyTurn && activeUnit && activeUnit.owner === state.role;
             
@@ -456,11 +530,20 @@
             btnAttack.style.background = state.actionMode === 'attack' ? '#c0392b' : '#34495e';
 
             const b = document.getElementById('board');
-            const currentMoveIdx = state.dragStartIdx !== null ? state.currentDragIdx : state.selectedBoardIdx;
-            const moveTargets = activeUnit ? getMoveTargets(currentMoveIdx, activeUnit) : [];
+            
+            // ハイライト計算の修正部分
+            let moveTargets = [];
+            if (activeUnit) {
+                if (state.dragStartIdx !== null) {
+                    // ドラッグ中は、最初に計算した「正しい移動先」のみをハイライト
+                    moveTargets = state.validMoveTargets;
+                } else {
+                    // ドラッグ前は現在位置からの移動範囲を計算
+                    moveTargets = getMoveTargets(state.selectedBoardIdx, activeUnit);
+                }
+            }
+            
             const attackTargets = activeUnit ? getAttackTargets(state.selectedBoardIdx, activeUnit) : [];
-
-            // スワイプ召喚中のハイライト判定
             const isSummoning = state.phase === 'summon' && state.selectedCardIdx !== null;
 
             for (let v=0; v<25; v++) {
@@ -483,7 +566,6 @@
                     cell.appendChild(el);
                 }
                 
-                // 召喚可能なマスの強調
                 if (isSummoning) {
                     const isZone = (state.role === 'p1' && i >= 20) || (state.role === 'p2' && i <= 4);
                     if (isZone && !state.board[i]) cell.classList.add('active-summon-zone');
@@ -516,12 +598,16 @@
                     el.innerHTML = `<b style="font-size:0.75rem; white-space:nowrap;">${c.name}</b><br><span style="color: #aaa; font-size: 0.6rem;">${c.desc}</span>`;
                 }
                 
-                // カードの「長押し・スワイプ開始」イベント
+                // カードの「長押し・スワイプ開始」および情報パネル表示イベント
                 el.onpointerdown = (e) => {
-                    if(!state.isMyTurn || state.isGameOver || state.phase !== 'summon') return;
+                    // 全フェーズ、全プレイヤーで手札の詳細をパネルに表示可能
                     state.selectedCardIdx = idx;
+                    state.selectedBoardIdx = null; // 盤面の選択を解除
+                    updateUI();
+                    
+                    // スワイプ召喚の準備は、自分のターンの召喚フェーズのみ
+                    if(!state.isMyTurn || state.isGameOver || state.phase !== 'summon') return;
 
-                    // ドラッグ用のゴースト要素を作成
                     const rect = el.getBoundingClientRect();
                     dragGhost = el.cloneNode(true);
                     dragGhost.classList.add('card-ghost');
@@ -531,7 +617,7 @@
                     dragGhost.style.top = (e.clientY - rect.height / 2) + 'px';
                     document.body.appendChild(dragGhost);
                     
-                    updateUI(); // 召喚ゾーンを光らせる
+                    updateUI(); 
                 };
 
                 h.appendChild(el);
@@ -542,8 +628,7 @@
             const targets = [];
             if (!unit || unit.hasMoved || unit.hasRotated || state.isGameOver) return targets;
             
-            const currentMoved = state.dragStartIdx !== null ? state.tempMovedCount : (unit.movedCount || 0);
-            const remMove = unit.move - currentMoved;
+            const remMove = unit.move - (unit.movedCount || 0);
             if (remMove <= 0) return targets;
 
             const r = Math.floor(idx / 5), c = idx % 5;
@@ -576,9 +661,10 @@
         function onCellClick(idx) {
             if (!state.isMyTurn || state.isGameOver) return;
             
+            // 攻撃モードでのターゲット決定
             if (state.actionMode === 'attack' && state.selectedBoardIdx !== null) {
                 const activeU = state.board[state.selectedBoardIdx];
-                if (activeU && !activeU.hasAttacked) {
+                if (activeU && !activeU.hasAttacked && activeU.owner === state.role) {
                     const targets = getAttackTargets(state.selectedBoardIdx, activeU);
                     if (targets.includes(idx) || idx === state.selectedBoardIdx) {
                         activeU.hasAttacked = true;
@@ -586,6 +672,11 @@
                         executeAttackAll(state.selectedBoardIdx);
                         state.selectedBoardIdx = null;
                         state.actionMode = 'move';
+                        updateUI();
+                    } else {
+                        // 攻撃範囲外をタップした場合、攻撃モードを解除して再選択
+                        state.actionMode = 'move';
+                        state.selectedBoardIdx = state.board[idx] ? idx : null;
                         updateUI();
                     }
                 }
@@ -637,6 +728,7 @@
             sendAction({ type: 'END_TURN', nextTurnCount: state.turnCount });
             
             state.selectedBoardIdx = null;
+            state.selectedCardIdx = null;
             state.actionMode = 'move';
             
             triggerTurnBanner("Enemy Turn", false); 
